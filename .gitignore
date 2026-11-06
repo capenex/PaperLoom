@@ -15,6 +15,42 @@ dist-ssr
 # Local reference material
 res/
 
+# Media assets (PDF, images, presentations, video)
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.tif
+*.tiff
+*.avif
+*.heic
+*.heif
+*.svg
+*.ico
+*.ppt
+*.pptx
+*.pptm
+*.pps
+*.ppsx
+*.potx
+*.odp
+*.key
+*.mp4
+*.m4v
+*.mov
+*.webm
+*.mkv
+*.avi
+*.wmv
+*.flv
+*.ogv
+*.mpg
+*.mpeg
+*.3gp
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
