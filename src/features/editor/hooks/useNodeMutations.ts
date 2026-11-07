@@ -2,26 +2,27 @@ import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
 import { createId } from '@/shared/lib/id'
-import type { NodeContent, NodeId, NodeLayout, PaperDocument } from '@/shared/types/paper'
+import type { NodeId, NodeLayout, PaperDocument } from '@/shared/types/paper'
 import {
   addChildNode,
   addSiblingNode,
   removeNode,
-  updateNodeContent,
   updateNodeLayout,
+  updateTextNodeContent,
 } from '../data/document'
 
 interface NodeMutationsOptions {
   readonly setDocument: Dispatch<SetStateAction<PaperDocument>>
   readonly setSelectedNodeId: Dispatch<SetStateAction<NodeId | null>>
   readonly setEditingNodeId: Dispatch<SetStateAction<NodeId | null>>
+  readonly setExpandedMediaNodeId: Dispatch<SetStateAction<NodeId | null>>
 }
 
 export interface NodeMutations {
   readonly addChild: (parentId: NodeId) => void
   readonly addSibling: (nodeId: NodeId) => void
   readonly deleteNode: (nodeId: NodeId) => void
-  readonly updateContent: (nodeId: NodeId, patch: Partial<NodeContent>) => void
+  readonly updateContent: (nodeId: NodeId, richText: string) => void
   readonly updateLayout: (nodeId: NodeId, patch: Partial<NodeLayout>) => void
 }
 
@@ -30,6 +31,7 @@ export function useNodeMutations({
   setDocument,
   setSelectedNodeId,
   setEditingNodeId,
+  setExpandedMediaNodeId,
 }: Readonly<NodeMutationsOptions>): NodeMutations {
   const addChild = useCallback(
     (parentId: NodeId) => {
@@ -40,7 +42,6 @@ export function useNodeMutations({
     },
     [setDocument, setSelectedNodeId, setEditingNodeId],
   )
-
   const addSibling = useCallback(
     (nodeId: NodeId) => {
       const newNodeId = createId()
@@ -50,19 +51,18 @@ export function useNodeMutations({
     },
     [setDocument, setSelectedNodeId, setEditingNodeId],
   )
-
   const deleteNode = useCallback(
     (nodeId: NodeId) => {
       setDocument((current) => removeNode(current, nodeId))
       setSelectedNodeId((current) => (current === nodeId ? null : current))
       setEditingNodeId((current) => (current === nodeId ? null : current))
+      setExpandedMediaNodeId((current) => (current === nodeId ? null : current))
     },
-    [setDocument, setSelectedNodeId, setEditingNodeId],
+    [setDocument, setSelectedNodeId, setEditingNodeId, setExpandedMediaNodeId],
   )
-
   const updateContent = useCallback(
-    (nodeId: NodeId, patch: Partial<NodeContent>) => {
-      setDocument((current) => updateNodeContent(current, nodeId, patch))
+    (nodeId: NodeId, richText: string) => {
+      setDocument((current) => updateTextNodeContent(current, nodeId, richText))
     },
     [setDocument],
   )

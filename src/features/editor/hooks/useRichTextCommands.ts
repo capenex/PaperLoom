@@ -1,19 +1,20 @@
 import { useCallback } from 'react'
 import type { RefObject } from 'react'
 
+import type { PaperReference } from '@/shared/types/paper'
 import {
   applyFontSize,
-  applyLink,
   captureSelection,
-  normalizeLinkUrl,
   restoreSelection,
   runEditorCommand,
 } from '../lib/richText'
+import { useLinkCommands } from './useLinkCommands'
 
 export interface RichTextCommands {
   readonly runCommand: (command: string, value?: string) => void
   readonly changeFontSize: (sizePx: number) => void
   readonly createLink: (url: string) => boolean
+  readonly createReference: (reference: PaperReference) => void
   readonly rememberSelection: () => void
 }
 
@@ -27,6 +28,12 @@ export function useRichTextCommands(
   const rememberSelection = useCallback(() => {
     selectionRef.current = captureSelection(editorRef.current)
   }, [editorRef, selectionRef])
+  const { createLink, createReference } = useLinkCommands(
+    editorRef,
+    selectionRef,
+    rememberSelection,
+    onChange,
+  )
 
   const runCommand = useCallback(
     (command: string, commandValue?: string) => {
@@ -36,7 +43,6 @@ export function useRichTextCommands(
     },
     [editorRef, onChange, rememberSelection, selectionRef],
   )
-
   const changeFontSize = useCallback(
     (sizePx: number) => {
       restoreSelection(editorRef.current, selectionRef.current)
@@ -47,17 +53,5 @@ export function useRichTextCommands(
     [editorRef, onChange, pendingFontSizeRef, rememberSelection, selectionRef],
   )
 
-  const createLink = useCallback(
-    (rawUrl: string): boolean => {
-      const url = normalizeLinkUrl(rawUrl)
-      if (url === null) return false
-      restoreSelection(editorRef.current, selectionRef.current)
-      applyLink(editorRef.current, url, onChange)
-      rememberSelection()
-      return true
-    },
-    [editorRef, onChange, rememberSelection, selectionRef],
-  )
-
-  return { runCommand, changeFontSize, createLink, rememberSelection }
+  return { runCommand, changeFontSize, createLink, createReference, rememberSelection }
 }

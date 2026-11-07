@@ -13,12 +13,16 @@ import {
 import type { LucideIcon } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
+import { FONT_SIZE_OPTIONS } from '@/shared/lib/nodeDefaults'
+import type { PaperReference } from '@/shared/types/paper'
 import { LinkControl } from './LinkControl'
+import { ReferenceControl } from './ReferenceControl'
 
 interface RichTextToolbarProps {
   readonly onCommand: (command: string, value?: string) => void
   readonly onFontSize: (sizePx: number) => void
   readonly onLink: (url: string) => boolean
+  readonly onReference: (reference: PaperReference) => void
 }
 
 interface ToolbarAction {
@@ -42,6 +46,10 @@ interface ColorButtonProps {
   readonly onCommand: (command: string, value: string) => void
 }
 
+interface ColorControlsProps {
+  readonly onCommand: (command: string, value: string) => void
+}
+
 interface FontSizeSelectProps {
   readonly onFontSize: (sizePx: number) => void
 }
@@ -54,7 +62,9 @@ const TEXT_ACTIONS: readonly ToolbarAction[] = [
   { command: 'insertUnorderedList', label: '无序列表', icon: List },
 ]
 
-const FONT_SIZES: readonly number[] = [12, 14, 16, 20, 24, 32]
+function ToolbarDivider() {
+  return <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
+}
 
 function FormatButton({ command, label, icon: Icon, onCommand }: Readonly<FormatButtonProps>) {
   return (
@@ -104,6 +114,27 @@ function ColorButton({
   )
 }
 
+function ColorControls({ onCommand }: Readonly<ColorControlsProps>) {
+  return (
+    <>
+      <ColorButton
+        label="文字颜色"
+        command="foreColor"
+        defaultValue="#7c3aed"
+        icon={Palette}
+        onCommand={onCommand}
+      />
+      <ColorButton
+        label="高亮颜色"
+        command="hiliteColor"
+        defaultValue="#fef08a"
+        icon={Highlighter}
+        onCommand={onCommand}
+      />
+    </>
+  )
+}
+
 function FontSizeSelect({ onFontSize }: Readonly<FontSizeSelectProps>) {
   const [value, setValue] = useState('')
 
@@ -123,7 +154,7 @@ function FontSizeSelect({ onFontSize }: Readonly<FontSizeSelectProps>) {
       onChange={handleChange}
     >
       <option value="">字号</option>
-      {FONT_SIZES.map((size) => (
+      {FONT_SIZE_OPTIONS.map((size) => (
         <option key={size} value={size}>
           {size}px
         </option>
@@ -132,7 +163,12 @@ function FontSizeSelect({ onFontSize }: Readonly<FontSizeSelectProps>) {
   )
 }
 
-export function RichTextToolbar({ onCommand, onFontSize, onLink }: Readonly<RichTextToolbarProps>) {
+export function RichTextToolbar({
+  onCommand,
+  onFontSize,
+  onLink,
+  onReference,
+}: Readonly<RichTextToolbarProps>) {
   return (
     <div className="flex shrink-0 flex-nowrap items-center gap-0.5">
       {TEXT_ACTIONS.map((action) => (
@@ -145,30 +181,13 @@ export function RichTextToolbar({ onCommand, onFontSize, onLink }: Readonly<Rich
         />
       ))}
 
-      <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
-
+      <ToolbarDivider />
       <FontSizeSelect onFontSize={onFontSize} />
-
-      <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
-
-      <ColorButton
-        label="文字颜色"
-        command="foreColor"
-        defaultValue="#7c3aed"
-        icon={Palette}
-        onCommand={onCommand}
-      />
-      <ColorButton
-        label="高亮颜色"
-        command="hiliteColor"
-        defaultValue="#fef08a"
-        icon={Highlighter}
-        onCommand={onCommand}
-      />
-
-      <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
-
+      <ToolbarDivider />
+      <ColorControls onCommand={onCommand} />
+      <ToolbarDivider />
       <LinkControl onLink={onLink} />
+      <ReferenceControl onReference={onReference} />
 
       <FormatButton
         command="removeFormat"

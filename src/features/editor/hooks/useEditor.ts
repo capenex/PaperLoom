@@ -1,52 +1,47 @@
-import { useCallback, useState } from 'react'
+import { useMemo, useState } from 'react'
 
-import type { NodeId, PaperDocument } from '@/shared/types/paper'
+import type { PaperDocument } from '@/shared/types/paper'
 import { createInitialDocument } from '../data/document'
+import { useDocumentMutations } from './useDocumentMutations'
+import { useEditorSelection } from './useEditorSelection'
 import { useNodeMutations } from './useNodeMutations'
+import { useStructureMutations } from './useStructureMutations'
 
-/** 编辑器状态：持有文档、当前选中节点与正在编辑的节点，暴露结构、内容、尺寸编辑操作 */
+/** 编辑器状态：持有文档、选中/编辑/放大的节点，暴露单节点编辑、结构拖动与文档级宏观操作 */
 export function useEditor() {
   const [document, setDocument] = useState<PaperDocument>(createInitialDocument)
-  const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null)
-  const [editingNodeId, setEditingNodeId] = useState<NodeId | null>(null)
+  const selection = useEditorSelection(document.nodes)
+  const setters = useMemo(
+    () => ({
+      setDocument,
+      setSelectedNodeId: selection.setSelectedNodeId,
+      setEditingNodeId: selection.setEditingNodeId,
+      setExpandedMediaNodeId: selection.setExpandedMediaNodeId,
+    }),
+    [selection.setSelectedNodeId, selection.setEditingNodeId, selection.setExpandedMediaNodeId],
+  )
 
-  const selectNode = useCallback((nodeId: NodeId | null) => {
-    setSelectedNodeId(nodeId)
-    setEditingNodeId((current) => (current === nodeId ? current : null))
-  }, [])
-
-  const startEditing = useCallback((nodeId: NodeId) => {
-    setSelectedNodeId(nodeId)
-    setEditingNodeId(nodeId)
-  }, [])
-
-  const stopEditing = useCallback(() => {
-    setEditingNodeId(null)
-  }, [])
-
-  const { addChild, addSibling, deleteNode, updateContent, updateLayout } = useNodeMutations({
-    setDocument,
-    setSelectedNodeId,
-    setEditingNodeId,
-  })
-
-  const selectedNode =
-    selectedNodeId === null
-      ? undefined
-      : document.nodes.find((node) => node.id === selectedNodeId)
+  const nodeMutations = useNodeMutations(setters)
+  const documentMutations = useDocumentMutations(setters)
+  const structureMutations = useStructureMutations(setters)
 
   return {
     document,
-    selectedNodeId,
-    selectedNode,
-    editingNodeId,
-    selectNode,
-    startEditing,
-    stopEditing,
-    addChild,
-    addSibling,
-    deleteNode,
-    updateContent,
-    updateLayout,
+    selectedNodeId: selection.selectedNodeId,
+    selectedNode: selection.selectedNode,
+    editingNodeId: selection.editingNodeId,
+    expandedMediaNodeId: selection.expandedMediaNodeId,
+    detailMediaNodeId: selection.detailMediaNodeId,
+    detailReference: selection.detailReference,
+    selectNode: selection.selectNode,
+    startEditing: selection.startEditing,
+    stopEditing: selection.stopEditing,
+    collapseExpandedMedia: selection.collapseExpandedMedia,
+    openMediaDetail: selection.openMediaDetail,
+    openReferenceDetail: selection.openReferenceDetail,
+    collapseDetail: selection.collapseDetail,
+    ...nodeMutations,
+    ...documentMutations,
+    ...structureMutations,
   }
 }

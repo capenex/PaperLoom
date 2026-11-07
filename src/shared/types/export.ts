@@ -91,7 +91,7 @@ export interface PaperLoomGlobalData {
 export const PAPERLOOM_GLOBAL_KEY = 'PAPERLOOM_DATA'
 
 /** 数据格式版本 */
-export const PAPERLOOM_DATA_VERSION = '1.0.0'
+export const PAPERLOOM_DATA_VERSION = '1.2.0'
 
 // ============================================================================
 // 导出器接口

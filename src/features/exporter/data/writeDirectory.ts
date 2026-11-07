@@ -9,10 +9,10 @@ declare global {
   }
 }
 
-async function writeTextFile(
+async function writeFile(
   parent: FileSystemDirectoryHandle,
   name: string,
-  content: string,
+  content: string | Blob,
 ): Promise<void> {
   const handle = await parent.getFileHandle(name, { create: true })
   const writable = await handle.createWritable()
@@ -28,7 +28,9 @@ export async function writeExportToDirectory(document: PaperDocument): Promise<v
   }
 
   const root = await picker({ mode: 'readwrite' })
-  for (const file of createExportFiles(document)) {
+  const files = await createExportFiles(document)
+
+  for (const file of files) {
     const segments = file.path.split('/')
     const fileName = segments.at(-1)
     if (fileName === undefined) continue
@@ -37,6 +39,6 @@ export async function writeExportToDirectory(document: PaperDocument): Promise<v
     for (const directoryName of segments.slice(0, -1)) {
       parent = await parent.getDirectoryHandle(directoryName, { create: true })
     }
-    await writeTextFile(parent, fileName, file.content)
+    await writeFile(parent, fileName, file.content)
   }
 }

@@ -1,16 +1,21 @@
 import { resolveNodeSize } from '@/shared/lib/nodeDefaults'
-import type { NodeId, PaperNode } from '@/shared/types/paper'
-import type { TreeLayout } from './layout'
+import type { DocumentDefaults, NodeId, PaperNode } from '@/shared/types/paper'
+import type { DocumentLayout } from '../data/layout'
 
 interface EditorConnectionsProps {
   readonly nodes: readonly PaperNode[]
-  readonly layout: TreeLayout
+  readonly layout: DocumentLayout
+  readonly defaults: DocumentDefaults
 }
 
-export function EditorConnections({ nodes, layout }: Readonly<EditorConnectionsProps>) {
+export function EditorConnections({
+  nodes,
+  layout,
+  defaults,
+}: Readonly<EditorConnectionsProps>) {
   const widths = new Map<NodeId, number>()
   for (const node of nodes) {
-    widths.set(node.id, resolveNodeSize(node.layout).width)
+    widths.set(node.id, resolveNodeSize(node.layout, defaults).width)
   }
 
   return (

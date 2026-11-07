@@ -1,20 +1,29 @@
 import type { CSSProperties, KeyboardEvent } from 'react'
 
 import { resolveNodeSize } from '@/shared/lib/nodeDefaults'
-import type { PaperNode } from '@/shared/types/paper'
+import type { DocumentDefaults, NodeLayout, TextNodeContent } from '@/shared/types/paper'
+import type { Point } from '../data/layout'
 import { RichTextEditor } from './RichTextEditor'
-import type { Point } from './layout'
 
 interface NodeEditWindowProps {
-  readonly node: PaperNode
+  readonly content: TextNodeContent
+  readonly layout: NodeLayout
   readonly position: Point
+  readonly defaults: DocumentDefaults
   readonly onChange: (html: string) => void
   readonly onClose: () => void
 }
 
-/** 双击节点后覆盖在节点上的编辑窗，输入框与节点边框贴合 */
-export function NodeEditWindow({ node, position, onChange, onClose }: Readonly<NodeEditWindowProps>) {
-  const size = resolveNodeSize(node.layout)
+/** 双击文字节点后覆盖在节点上的编辑窗，输入框与节点边框贴合 */
+export function NodeEditWindow({
+  content,
+  layout,
+  position,
+  defaults,
+  onChange,
+  onClose,
+}: Readonly<NodeEditWindowProps>) {
+  const size = resolveNodeSize(layout, defaults)
   const style: CSSProperties = {
     left: position.x,
     top: position.y,
@@ -43,9 +52,9 @@ export function NodeEditWindow({ node, position, onChange, onClose }: Readonly<N
       onKeyDown={handleKeyDown}
     >
       <RichTextEditor
-        value={node.content.richText}
+        value={content.richText}
+        fontSize={defaults.fontSize}
         onChange={onChange}
-        tone={node.parentId === null ? 'dark' : 'light'}
         onDone={onClose}
       />
     </dialog>

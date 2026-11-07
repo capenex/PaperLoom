@@ -172,14 +172,8 @@
   text-decoration: underline;
 }
 
-.node-root .node-rich-text a {
-  color: #c4b5fd;
-}
-
-.rich-text-editor-dark:empty::before {
-  color: #64748b;
-}
-
-.rich-text-editor-dark a {
-  color: #c4b5fd;
+/* 本地引用锚点：与常规超链接区分，不跳转 */
+.node-rich-text a[data-pl-ref] {
+  cursor: pointer;
+  text-decoration-style: dotted;
 }
