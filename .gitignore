@@ -15,6 +15,11 @@ dist-ssr
 # Local reference material
 res/
 
+# 工程文档（自动保存的工作数据，不入库）
+project.json
+project.json.bak
+project.json.tmp
+
 # Media assets (PDF, images, presentations, video)
 *.pdf
 *.png

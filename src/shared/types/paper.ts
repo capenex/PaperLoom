@@ -25,6 +25,15 @@ export interface TextNodeContent {
   readonly richText: string
 }
 
+/** 纯标题节点内容：以默认样式展示主标题，可配副标题 */
+export interface TitleNodeContent {
+  readonly kind: 'title'
+  /** 主标题纯文本 */
+  readonly title: string
+  /** 副标题纯文本（可为空字符串） */
+  readonly subtitle: string
+}
+
 /** 图片节点内容 */
 export interface ImageNodeContent {
   readonly kind: 'image'
@@ -34,8 +43,26 @@ export interface ImageNodeContent {
   readonly alt: string
 }
 
-/** 节点内容（文本或图片） */
-export type NodeContent = TextNodeContent | ImageNodeContent
+/** 静态文件展示格式：Markdown 文档或源代码/纯文本 */
+export type StaticFileFormat = 'markdown' | 'code'
+
+/** 静态文件节点内容：仅静态展示导入的源代码或 Markdown 文件 */
+export interface FileNodeContent {
+  readonly kind: 'file'
+  /** 文件名（如 README.md、main.ts） */
+  readonly fileName: string
+  /** 展示格式 */
+  readonly format: StaticFileFormat
+  /** 文件原始文本内容 */
+  readonly text: string
+}
+
+/** 节点内容（富文本、纯标题、图片多媒体或静态文件） */
+export type NodeContent =
+  | TextNodeContent
+  | TitleNodeContent
+  | ImageNodeContent
+  | FileNodeContent
 
 // ============================================================================
 // 本地引用

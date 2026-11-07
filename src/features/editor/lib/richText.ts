@@ -26,7 +26,9 @@ export function emitHtml(
   if (pendingFontSize !== undefined && pendingFontSize !== null) {
     normalizeFontSizeTags(editor, pendingFontSize)
   }
-  if (editor.textContent === '') {
+  const visibleText = (editor.textContent ?? '').replace(/\u200B/gu, '')
+  const hasBlockOrMath = editor.querySelector('.pl-math, h1, h2, h3, blockquote, ul, ol') !== null
+  if (visibleText === '' && !hasBlockOrMath) {
     editor.innerHTML = ''
     onChange('')
     return
@@ -173,6 +175,7 @@ export function plainTextFromHtml(html: string): string {
   return html
     .replace(/<[^>]*>/gu, ' ')
     .replace(/&nbsp;/giu, ' ')
+    .replace(/\u200B/gu, '')
     .replace(/\s+/gu, ' ')
     .trim()
 }

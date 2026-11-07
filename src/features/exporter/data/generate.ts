@@ -1,5 +1,6 @@
 import { PAPERLOOM_DATA_VERSION, PAPERLOOM_GLOBAL_KEY } from '@/shared/types/export'
 import type { PaperLoomGlobalData } from '@/shared/types/export'
+import { extractInboxRelativePath } from '@/shared/lib/inbox'
 import { REFERENCE_KIND_ATTR, REFERENCE_PREVIEW_ATTR } from '@/shared/lib/reference'
 import { DEFAULT_PRESENTATION_CONFIG } from '@/shared/types/presentation'
 import type { PaperDocument } from '@/shared/types/paper'
@@ -25,6 +26,7 @@ const IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
   'image/gif': 'gif',
   'image/svg+xml': 'svg',
   'image/avif': 'avif',
+  'image/bmp': 'bmp',
 }
 
 /** 引用资源扩展名：图片之外还有 PDF 与本地 HTML 页面 */
@@ -124,6 +126,23 @@ function collectReferenceSources(document: PaperDocument): readonly string[] {
   return sources
 }
 
+/** 资源缺失时开发服务器会把 index.html 当 200 返回，必须按 content-type 拦住，避免把 HTML 打包成资源 */
+function requireExtension(
+  source: string,
+  blob: Blob,
+  allowed: Readonly<Record<string, string>>,
+  what: string,
+): string {
+  const type = (blob.type.split(';')[0] ?? '').trim().toLowerCase()
+  const extension = allowed[type]
+  if (extension === undefined) {
+    throw new Error(
+      `无法读取${what}：${source}（服务返回 ${type === '' ? '未知类型' : type}，资源可能已缺失）`,
+    )
+  }
+  return extension
+}
+
 async function loadMediaAsset(source: string, index: number): Promise<MediaAssetFile> {
   const response = await fetch(source)
   if (!response.ok) {
@@ -131,10 +150,11 @@ async function loadMediaAsset(source: string, index: number): Promise<MediaAsset
   }
 
   const blob = await response.blob()
-  const extension = IMAGE_EXTENSIONS[blob.type] ?? 'bin'
+  const extension = requireExtension(source, blob, IMAGE_EXTENSIONS, '图片资源')
+  const inboxPath = extractInboxRelativePath(source)
   return {
     source,
-    path: `assets/media/image-${index + 1}.${extension}`,
+    path: inboxPath ?? `assets/media/image-${index + 1}.${extension}`,
     blob,
   }
 }
@@ -146,7 +166,7 @@ async function loadReferenceAsset(source: string, index: number): Promise<MediaA
   }
 
   const blob = await response.blob()
-  const extension = REFERENCE_EXTENSIONS[blob.type] ?? 'bin'
+  const extension = requireExtension(source, blob, REFERENCE_EXTENSIONS, '引用资源')
   return {
     source,
     path: `assets/refs/ref-${index + 1}.${extension}`,

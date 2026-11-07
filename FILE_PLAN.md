@@ -101,6 +101,12 @@ PaperDocument（shared/types/paper）
 
 根节点锚点直接就是舞台坐标，不做整体归一化：只有内容越出舞台左上角内边距时，`ensureStageBounds` 才把所有根节点锚点整体平移回来。这样用户拖出来的位置会原样保留，画布也只在触碰到上/左边界时才重排。导出包里的演示器使用同一套公式，因此两边渲染结果逐像素一致。
 
+### 图片放大只是视图位移
+
+点击图片节点按 `EXPANDED_MEDIA_SCALE`（3 倍）放大，同时把周围节点推开：以放大图中心为基准，左右整列平移、上下整棵子树平移；推开后仍与放大框相交的节点沿重叠更小的那根轴再挪开一次。这套计算只产出渲染用的坐标，不写回文档。`editor/data/mediaExpansionLayout.ts` 是纯函数，导出包的 `presenterLayoutScript.ts` 里有等价的 JS 实现，两边必须用同一套公式，否则放大时编辑器与演示包会错位。
+
+推开放的是卡片位置，连线要跟着动，所以连线端点也得按放大倍数外扩（`EditorConnections` 与 `connectionPathD` 各自实现，但用的是同一个倍数）。
+
 ### 结构编辑只属于编辑器
 
 按住 Alt 拖动节点可以移动整棵树、挂到别的节点下、或拖到空白处脱离为新根，这些操作由 `editor/data/nodeDrag.ts`（纯拖动模型）+ `editor/lib/dragHitTest.ts`（DOM 命中）+ `editor/hooks/useNodeDrag.ts`（状态）实现，导出包里不包含任何一份，导出的演示器只能平移、缩放和选中。

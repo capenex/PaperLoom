@@ -1,26 +1,41 @@
 import type { CSSProperties, KeyboardEvent } from 'react'
 
 import { resolveNodeSize } from '@/shared/lib/nodeDefaults'
-import type { DocumentDefaults, NodeLayout, TextNodeContent } from '@/shared/types/paper'
+import type {
+  DocumentDefaults,
+  NodeLayout,
+  TextNodeContent,
+  TitleNodeContent,
+} from '@/shared/types/paper'
 import type { Point } from '../data/layout'
 import { RichTextEditor } from './RichTextEditor'
+import { TitleNodeEditor } from './TitleNodeEditor'
 
 interface NodeEditWindowProps {
-  readonly content: TextNodeContent
+  readonly content: TextNodeContent | TitleNodeContent
   readonly layout: NodeLayout
   readonly position: Point
   readonly defaults: DocumentDefaults
-  readonly onChange: (html: string) => void
+  readonly onChangeText: (html: string) => void
+  readonly onChangeTitle: (title: string, subtitle: string) => void
   readonly onClose: () => void
 }
 
-/** 双击文字节点后覆盖在节点上的编辑窗，输入框与节点边框贴合 */
+function handleEscapeKey(event: KeyboardEvent<HTMLDialogElement>, onClose: () => void): void {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  onClose()
+}
+
+/** 双击富文本或纯标题节点后覆盖在节点上的编辑窗，输入框与节点边框贴合 */
 export function NodeEditWindow({
   content,
   layout,
   position,
   defaults,
-  onChange,
+  onChangeText,
+  onChangeTitle,
   onClose,
 }: Readonly<NodeEditWindowProps>) {
   const size = resolveNodeSize(layout, defaults)
@@ -30,13 +45,6 @@ export function NodeEditWindow({
     width: size.width,
     height: size.height,
     transform: 'translate(-50%, -50%)',
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>): void {
-    if (event.key !== 'Escape') return
-    event.preventDefault()
-    event.stopPropagation()
-    onClose()
   }
 
   return (
@@ -49,14 +57,25 @@ export function NodeEditWindow({
       onClick={(event) => {
         event.stopPropagation()
       }}
-      onKeyDown={handleKeyDown}
+      onKeyDown={(event) => {
+        handleEscapeKey(event, onClose)
+      }}
     >
-      <RichTextEditor
-        value={content.richText}
-        fontSize={defaults.fontSize}
-        onChange={onChange}
-        onDone={onClose}
-      />
+      {content.kind === 'title' ? (
+        <TitleNodeEditor
+          content={content}
+          fontSize={defaults.fontSize}
+          onChange={onChangeTitle}
+          onDone={onClose}
+        />
+      ) : (
+        <RichTextEditor
+          value={content.richText}
+          fontSize={defaults.fontSize}
+          onChange={onChangeText}
+          onDone={onClose}
+        />
+      )}
     </dialog>
   )
 }

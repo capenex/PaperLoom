@@ -74,6 +74,26 @@ function activateNode(
   onSelect(node.id)
 }
 
+function handleCardDoubleClick(
+  event: ReactMouseEvent<HTMLDivElement>,
+  node: PaperNode,
+  onEdit: (nodeId: NodeId) => void,
+  onOpenMediaDetail: (nodeId: NodeId) => void,
+  onOpenReferenceDetail: (reference: PaperReference) => void,
+): void {
+  if (handleReferenceDoubleClick(event, onOpenReferenceDetail)) {
+    event.stopPropagation()
+    return
+  }
+  if (node.content.kind === 'image') return
+  event.stopPropagation()
+  if (node.content.kind === 'file') {
+    onOpenMediaDetail(node.id)
+    return
+  }
+  onEdit(node.id)
+}
+
 export function cardHandlers({
   node,
   imageExpanded,
@@ -102,13 +122,7 @@ export function cardHandlers({
       activate()
     },
     onDoubleClick: (event) => {
-      if (handleReferenceDoubleClick(event, onOpenReferenceDetail)) {
-        event.stopPropagation()
-        return
-      }
-      if (node.content.kind === 'image') return
-      event.stopPropagation()
-      onEdit(node.id)
+      handleCardDoubleClick(event, node, onEdit, onOpenMediaDetail, onOpenReferenceDetail)
     },
     onContextMenu: (event) => {
       event.stopPropagation()

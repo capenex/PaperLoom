@@ -67,12 +67,34 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   }, { passive: false })
 
   function renderState() {
+    var activePositions = computeActivePositions(expandedId)
     Object.keys(cardsById).forEach(function (id) {
       var card = cardsById[id]
+      var pos = activePositions[id]
+      if (pos) {
+        card.style.left = pos.x + 'px'
+        card.style.top = pos.y + 'px'
+      }
       var selected = id === selectedId
       card.classList.toggle('node-selected', selected)
       card.classList.toggle('node-expanded', id === expandedId)
       card.setAttribute('aria-pressed', selected ? 'true' : 'false')
+    })
+    Object.keys(pathsById).forEach(function (id) {
+      var node = nodeById[id]
+      var parentNode = nodeById[node.parentId]
+      var source = activePositions[node.parentId]
+      var target = activePositions[id]
+      if (!parentNode || !source || !target) return
+      pathsById[id].setAttribute(
+        'd',
+        connectionPathD(
+          source,
+          target,
+          edgeWidthOf(parentNode, expandedId),
+          edgeWidthOf(node, expandedId),
+        ),
+      )
     })
   }
 

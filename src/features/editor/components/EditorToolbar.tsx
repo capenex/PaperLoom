@@ -1,4 +1,11 @@
-import type { DocumentDefaults, NodeId, NodeLayout, PaperNode } from '@/shared/types/paper'
+import type {
+  DocumentDefaults,
+  NodeContent,
+  NodeId,
+  NodeLayout,
+  PaperNode,
+  StaticFileFormat,
+} from '@/shared/types/paper'
 import { DocumentToolbar } from './DocumentToolbar'
 import { NodeInspector } from './NodeInspector'
 
@@ -11,6 +18,14 @@ interface EditorToolbarProps {
   readonly onAddChild: (nodeId: NodeId) => void
   readonly onAddSibling: (nodeId: NodeId) => void
   readonly onDeleteNode: (nodeId: NodeId) => void
+  readonly onChangeNodeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
+  readonly onUpdateNodeImage: (nodeId: NodeId, src: string, alt: string) => void
+  readonly onUpdateNodeFile: (
+    nodeId: NodeId,
+    fileName: string,
+    format: StaticFileFormat,
+    text: string,
+  ) => void
   readonly onUpdateLayout: (nodeId: NodeId, patch: Partial<NodeLayout>) => void
 }
 
@@ -24,6 +39,9 @@ export function EditorToolbar({
   onAddChild,
   onAddSibling,
   onDeleteNode,
+  onChangeNodeKind,
+  onUpdateNodeImage,
+  onUpdateNodeFile,
   onUpdateLayout,
 }: Readonly<EditorToolbarProps>) {
   if (selectedNode === undefined) {
@@ -44,6 +62,9 @@ export function EditorToolbar({
       onAddChild={onAddChild}
       onAddSibling={onAddSibling}
       onDelete={onDeleteNode}
+      onChangeKind={onChangeNodeKind}
+      onUpdateImage={onUpdateNodeImage}
+      onUpdateFile={onUpdateNodeFile}
       onUpdateLayout={onUpdateLayout}
     />
   )

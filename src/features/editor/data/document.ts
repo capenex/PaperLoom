@@ -10,12 +10,19 @@ import type {
 } from '@/shared/types/paper'
 import type { Point } from './layout'
 import { nextRootAnchor, stageBoundsShift } from './layout'
+import { SAMPLE_IMAGE } from './nodeContent'
 
-/** 初始文档展示的图片内容 */
-const SAMPLE_IMAGE: ImageNodeContent = {
-  kind: 'image',
-  src: '/media/oxcq2cmh.jpg',
-  alt: '示例图片',
+export {
+  changeNodeKind,
+  updateFileNodeContent,
+  updateImageNodeContent,
+  updateTextNodeContent,
+  updateTitleNodeContent,
+} from './nodeContent'
+
+export interface AddImageNodeTarget {
+  readonly parentId?: NodeId | null
+  readonly anchor?: Point
 }
 
 /** 生成空白文字节点；尺寸留空，渲染时使用共享默认值 */
@@ -29,12 +36,17 @@ function createTextNode(id: NodeId, parentId: NodeId | null): PaperNode {
 }
 
 /** 生成图片节点；尺寸留空，默认尺寸与文字节点一致 */
-function createImageNode(id: NodeId, parentId: NodeId | null): PaperNode {
+function createImageNode(
+  id: NodeId,
+  parentId: NodeId | null,
+  content: ImageNodeContent = SAMPLE_IMAGE,
+  anchor: Point = { x: 0, y: 0 },
+): PaperNode {
   return {
     id,
     parentId,
-    content: SAMPLE_IMAGE,
-    layout: { x: 0, y: 0, collapsed: false },
+    content,
+    layout: { x: anchor.x, y: anchor.y, collapsed: false },
   }
 }
 
@@ -122,6 +134,25 @@ export function addChildNode(
   return withStructure(document, nodes, document.rootIds)
 }
 
+/** 新增一个多媒体（图片）节点：指定有效 parentId 时挂为子节点，否则作为新根节点插入 */
+export function addImageNode(
+  document: PaperDocument,
+  newNodeId: NodeId,
+  content: ImageNodeContent,
+  target?: AddImageNodeTarget,
+): PaperDocument {
+  const parentId = target?.parentId ?? null
+  if (parentId !== null && document.nodes.some((node) => node.id === parentId)) {
+    const child = createImageNode(newNodeId, parentId, content)
+    return withStructure(document, [...document.nodes, child], document.rootIds)
+  }
+
+  const anchor =
+    target?.anchor ?? nextRootAnchor(document.nodes, document.rootIds, document.defaults)
+  const root = createImageNode(newNodeId, null, content, anchor)
+  return withStructure(document, [...document.nodes, root], [...document.rootIds, newNodeId])
+}
+
 /** 在指定节点之后插入一个空白同级节点；根节点没有同级节点 */
 export function addSiblingNode(
   document: PaperDocument,
@@ -140,23 +171,6 @@ export function addSiblingNode(
   ]
 
   return withStructure(document, nodes, document.rootIds)
-}
-
-/** 更新文字节点的富文本内容；图片节点不会被修改 */
-export function updateTextNodeContent(
-  document: PaperDocument,
-  nodeId: NodeId,
-  richText: string,
-): PaperDocument {
-  const target = document.nodes.find((node) => node.id === nodeId)
-  if (target === undefined || target.content.kind !== 'text') return document
-
-  const nodes = document.nodes.map((node) => {
-    if (node.id !== nodeId) return node
-    return { ...node, content: { ...target.content, richText } }
-  })
-
-  return withNodes(document, nodes)
 }
 
 /** 更新节点布局（宽高、根节点锚点等），未提供的字段保持不变 */

@@ -1,4 +1,10 @@
-import type { NodeId, PaperDocument, PaperReference } from '@/shared/types/paper'
+import type {
+  ImageNodeContent,
+  NodeId,
+  PaperDocument,
+  PaperReference,
+} from '@/shared/types/paper'
+import type { AddImageNodeTarget } from '../data/document'
 import type { Point } from '../data/layout'
 import { useReferencePreview } from '../hooks/useReferencePreview'
 import { findDetailContent } from '../lib/detailContent'
@@ -17,6 +23,8 @@ interface EditorProps {
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onStopEditing: () => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
+  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
+  readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
   readonly onOpenMediaDetail: (nodeId: NodeId) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
   readonly onCollapseDetail: () => void
@@ -46,6 +54,8 @@ export function Editor(props: Readonly<EditorProps>) {
         onStartEditing={props.onStartEditing}
         onStopEditing={props.onStopEditing}
         onUpdateContent={props.onUpdateContent}
+        onUpdateTitle={props.onUpdateTitle}
+        onAddImage={props.onAddImage}
         onOpenMediaDetail={props.onOpenMediaDetail}
         onOpenReferencePreview={preview.openPreview}
         onOpenReferenceDetail={preview.openDetail}

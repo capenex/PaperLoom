@@ -20,25 +20,23 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height)
   svg.setAttribute('aria-hidden', 'true')
 
+  var pathsById = {}
   nodes.forEach(function (node) {
     if (node.parentId === null) return
     var parentNode = nodeById[node.parentId]
     var source = positions[node.parentId]
     var target = positions[node.id]
     if (!parentNode || !source || !target) return
-    var startX = source.x + sizeOf(parentNode).width / 2
-    var endX = target.x - sizeOf(node).width / 2
-    var controlX = (startX + endX) / 2
     var path = document.createElementNS(svgNS, 'path')
     path.setAttribute(
       'd',
-      'M ' + startX + ' ' + source.y + ' C ' + controlX + ' ' + source.y +
-        ', ' + controlX + ' ' + target.y + ', ' + endX + ' ' + target.y,
+      connectionPathD(source, target, sizeOf(parentNode).width, sizeOf(node).width),
     )
     path.setAttribute('fill', 'none')
     path.setAttribute('stroke', '#7c5cbf')
     path.setAttribute('stroke-width', '2')
     path.setAttribute('opacity', '0.45')
+    pathsById[node.id] = path
     svg.appendChild(path)
   })
   stage.appendChild(svg)
@@ -75,6 +73,53 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
       var imageLabel = image.alt === '' ? '未命名图片' : image.alt
       card.setAttribute('aria-label', '图片节点：' + imageLabel + '，点击放大，再次点击查看大图，右键空白处还原')
       card.title = '点击放大，再次点击查看大图，右键空白处还原'
+    } else if (content.kind === 'title') {
+      var titleBox = document.createElement('div')
+      titleBox.className = 'node-title-box'
+      var mainTitle = typeof content.title === 'string' ? content.title.trim() : ''
+      var subTitle = typeof content.subtitle === 'string' ? content.subtitle.trim() : ''
+      if (mainTitle === '' && subTitle === '') {
+        var emptyTitle = document.createElement('span')
+        emptyTitle.className = 'node-empty'
+        emptyTitle.textContent = '空白标题'
+        card.appendChild(emptyTitle)
+      } else {
+        if (mainTitle !== '') {
+          var tEl = document.createElement('div')
+          tEl.className = 'node-title-main'
+          tEl.style.fontSize = Math.round(defaultFontSize * 1.15) + 'px'
+          tEl.textContent = mainTitle
+          titleBox.appendChild(tEl)
+        }
+        if (subTitle !== '') {
+          var sEl = document.createElement('div')
+          sEl.className = 'node-title-sub'
+          sEl.style.fontSize = Math.max(12, Math.round(defaultFontSize * 0.82)) + 'px'
+          sEl.textContent = subTitle
+          titleBox.appendChild(sEl)
+        }
+        card.appendChild(titleBox)
+      }
+      card.setAttribute('aria-label', '标题节点：' + (mainTitle || subTitle || '空白标题'))
+    } else if (content.kind === 'file') {
+      card.classList.add('node-file-card')
+      var fHead = document.createElement('div')
+      fHead.className = 'node-file-head'
+      var fName = document.createElement('span')
+      fName.className = 'node-file-name'
+      fName.textContent = content.fileName || '未命名文件'
+      var fBadge = document.createElement('span')
+      fBadge.className = 'node-file-badge'
+      fBadge.textContent = content.format === 'markdown' ? 'MD' : 'CODE'
+      fHead.appendChild(fName)
+      fHead.appendChild(fBadge)
+      var fPre = document.createElement('pre')
+      fPre.className = 'node-file-pre'
+      fPre.style.fontSize = Math.max(11, Math.round(defaultFontSize * 0.78)) + 'px'
+      fPre.textContent = typeof content.text === 'string' ? content.text : ''
+      card.appendChild(fHead)
+      card.appendChild(fPre)
+      card.setAttribute('aria-label', '静态文件节点：' + (content.fileName || '未命名文件'))
     } else {
       var labelText = '空白节点'
       var richText = content.richText

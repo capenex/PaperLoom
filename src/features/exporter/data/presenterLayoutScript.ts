@@ -7,7 +7,7 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
   var MIN_STAGE_SIZE = 400
   var FALLBACK_WIDTH = 208
   var FALLBACK_HEIGHT = 112
-  var FALLBACK_FONT_SIZE = 12
+  var FALLBACK_FONT_SIZE = 16
 
   var app = document.getElementById('app')
   if (!app) return
@@ -138,4 +138,86 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
 
   var width = Math.max(maxX + shiftX + STAGE_PADDING_X, MIN_STAGE_SIZE)
   var height = Math.max(maxY + shiftY + STAGE_PADDING_Y, MIN_STAGE_SIZE)
+
+  var EXPANDED_MEDIA_SCALE = 3
+  var COLLISION_GAP = 24
+
+  function isImageNode(node) {
+    var content = node.content || {}
+    return content.kind === 'image' && typeof content.src === 'string'
+  }
+
+  // 推开之后仍与放大框相交的节点，沿重叠更小的那根轴再挪开一次
+  function resolveResidualOverlap(point, size, center, expandedWidth, expandedHeight) {
+    var overlapX = expandedWidth / 2 + size.width / 2 + COLLISION_GAP - Math.abs(point.x - center.x)
+    var overlapY = expandedHeight / 2 + size.height / 2 + COLLISION_GAP - Math.abs(point.y - center.y)
+    if (overlapX <= 0 || overlapY <= 0) return point
+    if (overlapX < overlapY) {
+      return { x: point.x + (point.x < center.x ? -overlapX : overlapX), y: point.y }
+    }
+    return { x: point.x, y: point.y + (point.y < center.y ? -overlapY : overlapY) }
+  }
+
+  // 放大的图片自己不参与位移，但要继续往下遍历，否则它的子树会漏标
+  function markSubtreeShift(shifts, id, shiftY, expandedId) {
+    if (id !== expandedId) {
+      if (shifts[id] !== undefined) return
+      shifts[id] = shiftY
+    }
+    var children = childrenOf[id] || []
+    children.forEach(function (child) {
+      markSubtreeShift(shifts, child.id, shiftY, expandedId)
+    })
+  }
+
+  // 与编辑器 mediaExpansionLayout 同一套公式：放大图片中心不动，左右整列推开、上下整棵子树推开
+  function computeActivePositions(expandedId) {
+    var expandedNode = expandedId === null ? null : nodeById[expandedId]
+    if (!expandedNode || !isImageNode(expandedNode) || !positions[expandedId]) return positions
+
+    var center = positions[expandedId]
+    var baseSize = sizeOf(expandedNode)
+    var expandedWidth = baseSize.width * EXPANDED_MEDIA_SCALE
+    var expandedHeight = baseSize.height * EXPANDED_MEDIA_SCALE
+    var halfWidth = baseSize.width / 2
+    var pushX = (expandedWidth - baseSize.width) / 2
+    var pushY = (expandedHeight - baseSize.height) / 2
+
+    var verticalShifts = {}
+    nodes.forEach(function (node) {
+      if (node.id === expandedId) return
+      var pos = positions[node.id]
+      if (!pos || Math.abs(pos.x - center.x) >= halfWidth) return
+      markSubtreeShift(verticalShifts, node.id, pos.y < center.y ? -pushY : pushY, expandedId)
+    })
+
+    var next = {}
+    nodes.forEach(function (node) {
+      var pos = positions[node.id]
+      if (!pos) return
+      if (node.id === expandedId) {
+        next[node.id] = pos
+        return
+      }
+      var dx = pos.x - center.x
+      var offsetX = dx <= -halfWidth ? -pushX : (dx >= halfWidth ? pushX : 0)
+      var shifted = { x: pos.x + offsetX, y: pos.y + (verticalShifts[node.id] || 0) }
+      next[node.id] = resolveResidualOverlap(shifted, sizeOf(node), center, expandedWidth, expandedHeight)
+    })
+    return next
+  }
+
+  function edgeWidthOf(node, expandedId) {
+    var baseWidth = sizeOf(node).width
+    return node.id === expandedId && isImageNode(node) ? baseWidth * EXPANDED_MEDIA_SCALE : baseWidth
+  }
+
+  // 连线从父卡片右边缘连到子卡片左边缘；初次渲染与放大位移后共用同一条公式
+  function connectionPathD(source, target, sourceWidth, targetWidth) {
+    var startX = source.x + sourceWidth / 2
+    var endX = target.x - targetWidth / 2
+    var controlX = (startX + endX) / 2
+    return 'M ' + startX + ' ' + source.y + ' C ' + controlX + ' ' + source.y +
+      ', ' + controlX + ' ' + target.y + ', ' + endX + ' ' + target.y
+  }
 `

@@ -1,7 +1,14 @@
 import type { RefObject } from 'react'
 
-import type { DocumentDefaults, NodeId, PaperDocument, PaperNode, PaperReference } from '@/shared/types/paper'
+import type {
+  DocumentDefaults,
+  NodeId,
+  PaperDocument,
+  PaperNode,
+  PaperReference,
+} from '@/shared/types/paper'
 import type { DocumentLayout, Point } from '../data/layout'
+import { displaceLayoutForExpandedMedia } from '../data/mediaExpansionLayout'
 import type { NodeDragControls } from '../hooks/useNodeDrag'
 import { EditorConnections } from './EditorConnections'
 import { EditorNode } from './EditorNode'
@@ -18,6 +25,7 @@ interface EditorStageProps {
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
+  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onStopEditing: () => void
   readonly onOpenMediaDetail: (nodeId: NodeId) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
@@ -45,6 +53,7 @@ interface EditorEditLayerProps {
   readonly editingNodeId: NodeId | null
   readonly positions: ReadonlyMap<NodeId, Point>
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
+  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onClose: () => void
 }
 
@@ -54,10 +63,12 @@ function EditorEditLayer({
   editingNodeId,
   positions,
   onUpdateContent,
+  onUpdateTitle,
   onClose,
 }: Readonly<EditorEditLayerProps>) {
   const node = nodes.find((item) => item.id === editingNodeId)
-  if (node === undefined || node.content.kind !== 'text') return null
+  if (node === undefined) return null
+  if (node.content.kind !== 'text' && node.content.kind !== 'title') return null
   const position = positions.get(node.id)
   if (position === undefined) return null
 
@@ -68,8 +79,11 @@ function EditorEditLayer({
       layout={node.layout}
       position={position}
       defaults={defaults}
-      onChange={(html) => {
+      onChangeText={(html) => {
         onUpdateContent(node.id, html)
+      }}
+      onChangeTitle={(title, subtitle) => {
+        onUpdateTitle(node.id, title, subtitle)
       }}
       onClose={onClose}
     />
@@ -90,6 +104,7 @@ function StageNodes({
   onOpenReferencePreview,
   onOpenReferenceDetail,
 }: Readonly<StageNodesProps>) {
+  const anyDragging = drag.draggingNodeId !== null
   return (
     <>
       {nodes.map((node) => {
@@ -106,6 +121,7 @@ function StageNodes({
             editing={node.id === editingNodeId}
             expanded={node.id === expandedMediaNodeId}
             dragging={dragging}
+            anyDragging={anyDragging}
             dropTarget={drag.dropTargetId === node.id}
             detachHint={dragging && drag.overBlank && node.parentId !== null}
             onSelect={onSelectNode}
@@ -122,61 +138,63 @@ function StageNodes({
   )
 }
 
-/** 拖动期间用预览位置替换真实布局，其余时候原样呈现 */
+/** 拖动期间用预览位置替换真实布局；非拖动但存在放大图片时，自动推开周围节点 */
 function viewLayoutOf(
   layout: DocumentLayout,
   preview: ReadonlyMap<NodeId, Point> | null,
+  nodes: readonly PaperNode[],
+  defaults: DocumentDefaults,
+  expandedMediaNodeId: NodeId | null,
 ): DocumentLayout {
-  return preview === null ? layout : { ...layout, positions: preview }
+  if (preview !== null) return { ...layout, positions: preview }
+  return displaceLayoutForExpandedMedia(layout, nodes, defaults, expandedMediaNodeId)
 }
 
-/** 舞台：按布局摆放连线与节点卡片；拖动期间整体呈现预览位置，其余时候呈现真实布局 */
-export function EditorStage({
-  document,
-  layout,
-  drag,
-  stageRef,
-  selectedNodeId,
-  editingNodeId,
-  expandedMediaNodeId,
-  onSelectNode,
-  onStartEditing,
-  onUpdateContent,
-  onStopEditing,
-  onOpenMediaDetail,
-  onOpenReferencePreview,
-  onOpenReferenceDetail,
-}: Readonly<EditorStageProps>) {
-  const viewLayout = viewLayoutOf(layout, drag.previewPositions)
+/** 舞台：按布局摆放连线与节点卡片；拖动期间整体呈现预览位置，图片放大时自动挤压周围节点 */
+export function EditorStage({ stageRef, ...rest }: Readonly<EditorStageProps>) {
+  const { document, layout, drag } = rest
+  const viewLayout = viewLayoutOf(
+    layout,
+    drag.previewPositions,
+    document.nodes,
+    document.defaults,
+    rest.expandedMediaNodeId,
+  )
 
   return (
     <div
       ref={stageRef}
       className="relative m-auto shrink-0"
-      style={{ width: layout.width, height: layout.height }}
+      style={{ width: viewLayout.width, height: viewLayout.height }}
     >
-      <EditorConnections nodes={document.nodes} layout={viewLayout} defaults={document.defaults} />
+      <EditorConnections
+        nodes={document.nodes}
+        layout={viewLayout}
+        defaults={document.defaults}
+        expandedMediaNodeId={rest.expandedMediaNodeId}
+      />
       <StageNodes
         nodes={document.nodes}
         defaults={document.defaults}
         positions={viewLayout.positions}
         drag={drag}
-        selectedNodeId={selectedNodeId}
-        editingNodeId={editingNodeId}
-        expandedMediaNodeId={expandedMediaNodeId}
-        onSelectNode={onSelectNode}
-        onStartEditing={onStartEditing}
-        onOpenMediaDetail={onOpenMediaDetail}
-        onOpenReferencePreview={onOpenReferencePreview}
-        onOpenReferenceDetail={onOpenReferenceDetail}
+        selectedNodeId={rest.selectedNodeId}
+        editingNodeId={rest.editingNodeId}
+        expandedMediaNodeId={rest.expandedMediaNodeId}
+        onSelectNode={rest.onSelectNode}
+        onStartEditing={rest.onStartEditing}
+        onOpenMediaDetail={rest.onOpenMediaDetail}
+        onOpenReferencePreview={rest.onOpenReferencePreview}
+        onOpenReferenceDetail={rest.onOpenReferenceDetail}
       />
       <EditorEditLayer
         nodes={document.nodes}
         defaults={document.defaults}
-        editingNodeId={editingNodeId}
-        positions={layout.positions}
-        onUpdateContent={onUpdateContent}
-        onClose={onStopEditing}
+        editingNodeId={rest.editingNodeId}
+        positions={viewLayout.positions}
+        onUpdateContent={rest.onUpdateContent}
+        onUpdateTitle={rest.onUpdateTitle}
+        onClose={rest.onStopEditing}
       />
     </div>
   )
