@@ -4,8 +4,9 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from 'react'
 
+import { findTriggeredEvent } from '@/shared/lib/nodeEvents'
 import { parseReferenceAnchor, REFERENCE_KIND_ATTR } from '@/shared/lib/reference'
-import type { NodeId, PaperNode, PaperReference } from '@/shared/types/paper'
+import type { CanvasId, NodeEventAction, NodeId, PaperNode, PaperReference } from '@/shared/types/paper'
 
 /** 卡片的全部指针与键盘交互，集中在一处以便组件本身保持简短 */
 export interface NodeCardHandlers {
@@ -18,10 +19,12 @@ export interface NodeCardHandlers {
 
 export interface NodeCardHandlerOptions {
   readonly node: PaperNode
+  readonly selected: boolean
   readonly imageExpanded: boolean
+  readonly activeCanvasId?: CanvasId | null
   readonly onSelect: (nodeId: NodeId) => void
   readonly onEdit: (nodeId: NodeId) => void
-  readonly onOpenMediaDetail: (nodeId: NodeId) => void
+  readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
   readonly onDragStart: (nodeId: NodeId, event: ReactPointerEvent<HTMLElement>) => void
@@ -34,99 +37,133 @@ function referenceAnchorOf(target: EventTarget | null): HTMLAnchorElement | null
   return target.closest(`a[${REFERENCE_KIND_ATTR}]`)
 }
 
-/** 单击本地引用锚点：不跳转、只弹预览；返回是否已处理 */
-function handleReferenceClick(
+/** 触发本地引用锚点上的绑定事件（target = 'reference'）；常规超链接与纯文本返回 false */
+function handleReferenceTrigger(
   event: ReactMouseEvent<HTMLDivElement>,
+  node: PaperNode,
+  trigger: 'click' | 'double-click',
+  activeCanvasId: CanvasId | null,
+  onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void,
   onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void,
-): boolean {
-  const anchor = referenceAnchorOf(event.target)
-  if (anchor === null) return false
-  event.preventDefault()
-  const reference = parseReferenceAnchor(anchor)
-  if (reference !== null) onOpenReferencePreview(reference, anchor)
-  return true
-}
-
-/** 双击本地引用锚点：直接进入右侧详情（PDF 即全文引用页）；返回是否已处理 */
-function handleReferenceDoubleClick(
-  event: ReactMouseEvent<HTMLDivElement>,
   onOpenReferenceDetail: (reference: PaperReference) => void,
 ): boolean {
   const anchor = referenceAnchorOf(event.target)
   if (anchor === null) return false
   event.preventDefault()
   const reference = parseReferenceAnchor(anchor)
-  if (reference !== null) onOpenReferenceDetail(reference)
+  if (reference === null) return true
+
+  const binding = findTriggeredEvent(node, trigger, activeCanvasId, 'reference')
+  if (binding === undefined) return true
+
+  if (binding.action.type === 'open-reference-preview') {
+    onOpenReferencePreview(reference, anchor)
+  } else if (binding.action.type === 'open-detail') {
+    onOpenReferenceDetail(reference)
+  } else {
+    onTriggerEvent(node.id, binding.action)
+  }
   return true
 }
 
-/** 单击选中节点；已放大的图片节点再次单击打开右侧大图 */
+/** 单击节点：未选中时先选中（图片同步 1.5x 放大），已选中时优先触发 second-click 事件（如图片默认弹窗） */
 function activateNode(
   node: PaperNode,
+  selected: boolean,
   expanded: boolean,
+  activeCanvasId: CanvasId | null,
   onSelect: (nodeId: NodeId) => void,
-  onOpenMediaDetail: (nodeId: NodeId) => void,
+  onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void,
 ): void {
-  if (node.content.kind === 'image' && expanded) {
-    onOpenMediaDetail(node.id)
-    return
+  const alreadyActive = selected || (node.content.kind === 'image' && expanded)
+  if (alreadyActive) {
+    const secondClickEvent = findTriggeredEvent(node, 'second-click', activeCanvasId, 'node')
+    if (secondClickEvent !== undefined) {
+      onTriggerEvent(node.id, secondClickEvent.action)
+      return
+    }
   }
+
   onSelect(node.id)
+  const clickEvent = findTriggeredEvent(node, 'click', activeCanvasId, 'node')
+  if (clickEvent !== undefined) {
+    onTriggerEvent(node.id, clickEvent.action)
+  }
 }
 
 function handleCardDoubleClick(
   event: ReactMouseEvent<HTMLDivElement>,
   node: PaperNode,
+  activeCanvasId: CanvasId | null,
   onEdit: (nodeId: NodeId) => void,
-  onOpenMediaDetail: (nodeId: NodeId) => void,
+  onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void,
+  onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void,
   onOpenReferenceDetail: (reference: PaperReference) => void,
 ): void {
-  if (handleReferenceDoubleClick(event, onOpenReferenceDetail)) {
+  if (
+    handleReferenceTrigger(
+      event,
+      node,
+      'double-click',
+      activeCanvasId,
+      onTriggerEvent,
+      onOpenReferencePreview,
+      onOpenReferenceDetail,
+    )
+  ) {
     event.stopPropagation()
     return
   }
-  if (node.content.kind === 'image') return
   event.stopPropagation()
-  if (node.content.kind === 'file') {
-    onOpenMediaDetail(node.id)
+
+  const isEditableText = node.content.kind === 'text' || node.content.kind === 'title'
+  // 按住 Alt 双击始终强制进入文字编辑，避免双击事件改绑后无法编辑文字
+  if (event.altKey && isEditableText) {
+    onEdit(node.id)
     return
   }
-  onEdit(node.id)
+
+  const dblClickEvent = findTriggeredEvent(node, 'double-click', activeCanvasId, 'node')
+  if (dblClickEvent !== undefined) {
+    onTriggerEvent(node.id, dblClickEvent.action)
+  }
 }
 
-export function cardHandlers({
-  node,
-  imageExpanded,
-  onSelect,
-  onEdit,
-  onOpenMediaDetail,
-  onOpenReferencePreview,
-  onOpenReferenceDetail,
-  onDragStart,
-  shouldSuppressClick,
-}: Readonly<NodeCardHandlerOptions>): NodeCardHandlers {
+export function cardHandlers(options: Readonly<NodeCardHandlerOptions>): NodeCardHandlers {
+  const { node, selected, imageExpanded, activeCanvasId = null } = options
   const activate = (): void => {
-    activateNode(node, imageExpanded, onSelect, onOpenMediaDetail)
+    activateNode(node, selected, imageExpanded, activeCanvasId, options.onSelect, options.onTriggerEvent)
   }
+  const fireRef = (event: ReactMouseEvent<HTMLDivElement>, trigger: 'click' | 'double-click'): boolean =>
+    handleReferenceTrigger(
+      event,
+      node,
+      trigger,
+      activeCanvasId,
+      options.onTriggerEvent,
+      options.onOpenReferencePreview,
+      options.onOpenReferenceDetail,
+    )
 
   return {
-    onPointerDown: (event) => {
-      onDragStart(node.id, event)
-    },
+    onPointerDown: (event) => { options.onDragStart(node.id, event) },
     onClick: (event) => {
       event.stopPropagation()
-      // 拖动结束时浏览器仍会补发一次 click，不能让它改变选中状态
-      if (shouldSuppressClick()) return
-      // 本地引用不跳转：单击只弹预览，也不改变节点选中
-      if (handleReferenceClick(event, onOpenReferencePreview)) return
-      activate()
+      if (options.shouldSuppressClick()) return
+      if (!fireRef(event, 'click')) activate()
     },
     onDoubleClick: (event) => {
-      handleCardDoubleClick(event, node, onEdit, onOpenMediaDetail, onOpenReferenceDetail)
+      handleCardDoubleClick(
+        event,
+        node,
+        activeCanvasId,
+        options.onEdit,
+        options.onTriggerEvent,
+        options.onOpenReferencePreview,
+        options.onOpenReferenceDetail,
+      )
     },
-    onContextMenu: (event) => {
-      event.stopPropagation()
-    },
+    onContextMenu: (event) => { event.stopPropagation() },
     onKeyDown: (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return
       event.preventDefault()

@@ -2,17 +2,22 @@
  * 工程文件的序列化与校验
  *
  * 工程文件只存文档与 res/ 下的资源链接，不内嵌任何二进制；
- * 载入时先校验结构与树关系，避免把半残数据推进画布。
+ * 载入时先校验结构与树关系（含节点事件绑定与支线子画布），避免把半残数据推进画布。
  */
 
 import type {
+  CanvasId,
   DocumentDefaults,
   DocumentMeta,
   NodeContent,
-  NodeLayout,
+  NodeEventAction,
+  NodeEventBinding,
+  NodeEventTrigger,
   NodeId,
+  NodeLayout,
   PaperDocument,
   PaperNode,
+  SubCanvas,
 } from '../types/paper'
 import { PROJECT_FORMAT_VERSION } from '../types/project'
 import type { PaperLoomProject } from '../types/project'
@@ -67,14 +72,75 @@ function isNodeContent(value: unknown): value is NodeContent {
   return false
 }
 
+function isEventTarget(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === 'node' ||
+    value === 'reference' ||
+    value === 'reference-popup'
+  )
+}
+
+function isEventTrigger(value: unknown): value is NodeEventTrigger {
+  return value === 'double-click' || value === 'second-click' || value === 'click'
+}
+
+function isEventAction(value: unknown): value is NodeEventAction {
+  if (!isRecord(value)) return false
+  if (
+    value.type === 'edit-node' ||
+    value.type === 'open-detail' ||
+    value.type === 'open-reference-preview'
+  ) {
+    return true
+  }
+  if (value.type === 'open-canvas') return isText(value.canvasId) && value.canvasId.trim() !== ''
+  return false
+}
+
+function isNodeEventBinding(value: unknown): value is NodeEventBinding {
+  if (!isRecord(value)) return false
+  return (
+    isText(value.id) &&
+    isEventTarget(value.target) &&
+    isEventTrigger(value.trigger) &&
+    isEventAction(value.action)
+  )
+}
+
+function isOptionalEvents(value: unknown): value is readonly NodeEventBinding[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every(isNodeEventBinding))
+}
+
 function isPaperNode(value: unknown): value is PaperNode {
   if (!isRecord(value)) return false
   return (
     isText(value.id) &&
     (value.parentId === null || isText(value.parentId)) &&
     isNodeContent(value.content) &&
-    isNodeLayout(value.layout)
+    isNodeLayout(value.layout) &&
+    isOptionalEvents(value.events)
   )
+}
+
+function isSubCanvas(value: unknown): value is SubCanvas {
+  if (!isRecord(value)) return false
+  return (
+    isText(value.id) &&
+    isText(value.hostNodeId) &&
+    Array.isArray(value.nodes) &&
+    value.nodes.every(isPaperNode) &&
+    Array.isArray(value.rootIds) &&
+    value.rootIds.every(isText)
+  )
+}
+
+function isOptionalSubCanvases(
+  value: unknown,
+): value is Readonly<Record<CanvasId, SubCanvas>> | undefined {
+  if (value === undefined) return true
+  if (!isRecord(value)) return false
+  return Object.entries(value).every(([key, item]) => isSubCanvas(item) && item.id === key)
 }
 
 function isDocumentMeta(value: unknown): value is DocumentMeta {
@@ -100,15 +166,14 @@ function isDocumentDefaults(value: unknown): value is DocumentDefaults {
 
 function toDocument(raw: unknown): PaperDocument | null {
   if (!isRecord(raw)) return null
-  const meta = raw.meta
-  const defaults = raw.defaults
-  const nodes = raw.nodes
-  const rootIds = raw.rootIds
-  if (!isDocumentMeta(meta)) return null
-  if (!isDocumentDefaults(defaults)) return null
+  const { meta, defaults, nodes, rootIds, subCanvases } = raw
+  if (!isDocumentMeta(meta) || !isDocumentDefaults(defaults)) return null
   if (!Array.isArray(nodes) || !nodes.every(isPaperNode)) return null
   if (!Array.isArray(rootIds) || !rootIds.every(isText)) return null
-  return { meta, defaults, nodes, rootIds }
+  if (!isOptionalSubCanvases(subCanvases)) return null
+  return subCanvases === undefined
+    ? { meta, defaults, nodes, rootIds }
+    : { meta, defaults, nodes, rootIds, subCanvases }
 }
 
 function hasParentCycle(nodes: readonly PaperNode[], startId: NodeId): boolean {
@@ -127,30 +192,46 @@ function hasParentCycle(nodes: readonly PaperNode[], startId: NodeId): boolean {
   return true
 }
 
-/** 校验节点引用关系：ID 唯一、父节点存在、根节点非空且自洽、无循环引用 */
-function describeDocumentProblem(document: PaperDocument): string | null {
+function describeTreeProblem(
+  nodes: readonly PaperNode[],
+  rootIds: readonly NodeId[],
+): string | null {
   const ids = new Set<NodeId>()
-  for (const node of document.nodes) {
+  for (const node of nodes) {
     if (ids.has(node.id)) return `节点 ID 重复：${node.id}`
     ids.add(node.id)
   }
 
-  if (document.rootIds.length === 0) return '至少要有一个根节点'
-  const rootIds = new Set<NodeId>(document.rootIds)
-  for (const rootId of document.rootIds) {
+  if (rootIds.length === 0) return '至少要有一个根节点'
+  const rootIdSet = new Set<NodeId>(rootIds)
+  for (const rootId of rootIds) {
     if (!ids.has(rootId)) return `根节点不存在：${rootId}`
   }
 
-  for (const node of document.nodes) {
-    if (rootIds.has(node.id) && node.parentId !== null) {
+  for (const node of nodes) {
+    if (rootIdSet.has(node.id) && node.parentId !== null) {
       return `节点 ${node.id} 既是根节点又有父节点`
     }
-    if (node.parentId === null) continue
-    if (!ids.has(node.parentId)) return `父节点不存在：${node.parentId}`
+    if (node.parentId !== null && !ids.has(node.parentId)) {
+      return `父节点不存在：${node.parentId}`
+    }
   }
 
-  for (const node of document.nodes) {
-    if (hasParentCycle(document.nodes, node.id)) return `节点存在循环引用：${node.id}`
+  for (const node of nodes) {
+    if (hasParentCycle(nodes, node.id)) return `节点存在循环引用：${node.id}`
+  }
+  return null
+}
+
+/** 校验主画布与所有支线子画布的节点引用关系 */
+function describeDocumentProblem(document: PaperDocument): string | null {
+  const mainProblem = describeTreeProblem(document.nodes, document.rootIds)
+  if (mainProblem !== null) return mainProblem
+  if (document.subCanvases === undefined) return null
+
+  for (const sub of Object.values(document.subCanvases)) {
+    const subProblem = describeTreeProblem(sub.nodes, sub.rootIds)
+    if (subProblem !== null) return `支线画布 ${sub.id}：${subProblem}`
   }
   return null
 }

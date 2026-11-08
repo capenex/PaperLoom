@@ -180,9 +180,9 @@ export default defineConfig({
     },
   },
   server: {
-    // 收件箱接口能往 res/inbox 写文件，默认只监听本机；需要局域网访问再改回 0.0.0.0
-    host: 'localhost',
+    host: '0.0.0.0',
     port: 3000,
+    allowedHosts: true,
     watch: {
       // 工程文件由 /api/project 自己写盘，不能让 Vite 监听到后触发整页重载
       ignored: ['**/project.json', '**/project.json.tmp', '**/project.json.bak'],

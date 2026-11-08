@@ -6,6 +6,7 @@ import type { ReferencePreview } from '../lib/referencePreview'
 interface ReferencePreviewPopupProps {
   readonly preview: ReferencePreview
   readonly onOpenDetail: () => void
+  readonly onDoubleClickDetail?: (() => void) | undefined
   readonly onClose: () => void
 }
 
@@ -51,13 +52,10 @@ function PreviewBody({ reference }: Readonly<{ reference: PaperReference }>) {
 }
 
 /** 单击引用锚点后的预览弹窗：再点击弹窗内容进入右侧详情 */
-export function ReferencePreviewPopup({
-  preview,
-  onOpenDetail,
-  onClose,
-}: Readonly<ReferencePreviewPopupProps>) {
+export function ReferencePreviewPopup(props: Readonly<ReferencePreviewPopupProps>) {
+  const { preview, onOpenDetail, onDoubleClickDetail, onClose } = props
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent): void {
+    const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -67,7 +65,6 @@ export function ReferencePreviewPopup({
   }, [onClose])
 
   const { reference } = preview
-
   return (
     <dialog
       open
@@ -83,20 +80,19 @@ export function ReferencePreviewPopup({
           {kindTag(reference)}
         </span>
       </header>
-
       <button
         type="button"
-        title="在右侧展开"
+        title="触发预览小窗绑定事件（默认在右侧展开）"
         className="block w-full cursor-pointer bg-slate-50 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
         onClick={onOpenDetail}
+        onDoubleClick={onDoubleClickDetail}
       >
         <PreviewBody reference={reference} />
       </button>
-
       <footer className="px-3 py-1.5 text-[11px] text-slate-400">
         {reference.kind === 'pdf'
-          ? '点击在右侧展开 · 双击链接跳转全文引用页'
-          : '点击在右侧展开'}
+          ? '点击触发小窗事件（默认右侧展开） · 可在「⚡ 事件」中自定义'
+          : '点击在右侧展开 · 可在「⚡ 事件」中自定义'}
       </footer>
     </dialog>
   )

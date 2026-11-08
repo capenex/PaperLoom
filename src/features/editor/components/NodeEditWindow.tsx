@@ -1,4 +1,5 @@
 import type { CSSProperties, KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 
 import { resolveNodeSize } from '@/shared/lib/nodeDefaults'
 import type {
@@ -28,16 +29,56 @@ function handleEscapeKey(event: KeyboardEvent<HTMLDialogElement>, onClose: () =>
   onClose()
 }
 
-/** 双击富文本或纯标题节点后覆盖在节点上的编辑窗，输入框与节点边框贴合 */
-export function NodeEditWindow({
+function BottomRichTextDialog({
   content,
-  layout,
-  position,
-  defaults,
+  fontSize,
   onChangeText,
-  onChangeTitle,
   onClose,
-}: Readonly<NodeEditWindowProps>) {
+}: Readonly<{
+  content: TextNodeContent
+  fontSize: number
+  onChangeText: (html: string) => void
+  onClose: () => void
+}>) {
+  const portalHost = document.querySelector('[data-canvas-viewport="true"]') ?? document.body
+  return createPortal(
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- 底部编辑窗需拦截点击与 Escape
+    <dialog
+      open
+      aria-label="编辑富文本节点内容"
+      className="absolute inset-auto bottom-0 left-1/2 z-30 m-0 flex h-64 w-[min(780px,90%)] max-h-none max-w-none -translate-x-1/2 flex-col overflow-hidden rounded-t-2xl border-2 border-b-0 border-slate-300 bg-white p-0 shadow-[0_-16px_48px_-12px_rgba(15,23,42,0.18)] outline-none animate-in slide-in-from-bottom-4 duration-200"
+      onClick={(event) => {
+        event.stopPropagation()
+      }}
+      onKeyDown={(event) => {
+        handleEscapeKey(event, onClose)
+      }}
+    >
+      <RichTextEditor
+        value={content.richText}
+        fontSize={fontSize}
+        onChange={onChangeText}
+        onDone={onClose}
+      />
+    </dialog>,
+    portalHost,
+  )
+}
+
+/** 富文本节点从画布下侧中央弹出编辑器，纯标题节点保持原位贴合编辑 */
+export function NodeEditWindow(props: Readonly<NodeEditWindowProps>) {
+  const { content, layout, position, defaults, onChangeText, onChangeTitle, onClose } = props
+  if (content.kind === 'text') {
+    return (
+      <BottomRichTextDialog
+        content={content}
+        fontSize={defaults.fontSize}
+        onChangeText={onChangeText}
+        onClose={onClose}
+      />
+    )
+  }
+
   const size = resolveNodeSize(layout, defaults)
   const style: CSSProperties = {
     left: position.x,
@@ -54,28 +95,15 @@ export function NodeEditWindow({
       aria-label="编辑节点内容"
       className="absolute inset-auto z-20 m-0 max-h-none max-w-none border-0 bg-transparent p-0 outline-none"
       style={style}
-      onClick={(event) => {
-        event.stopPropagation()
-      }}
-      onKeyDown={(event) => {
-        handleEscapeKey(event, onClose)
-      }}
+      onClick={(event) => { event.stopPropagation() }}
+      onKeyDown={(event) => { handleEscapeKey(event, onClose) }}
     >
-      {content.kind === 'title' ? (
-        <TitleNodeEditor
-          content={content}
-          fontSize={defaults.fontSize}
-          onChange={onChangeTitle}
-          onDone={onClose}
-        />
-      ) : (
-        <RichTextEditor
-          value={content.richText}
-          fontSize={defaults.fontSize}
-          onChange={onChangeText}
-          onDone={onClose}
-        />
-      )}
+      <TitleNodeEditor
+        content={content}
+        fontSize={defaults.fontSize}
+        onChange={onChangeTitle}
+        onDone={onClose}
+      />
     </dialog>
   )
 }

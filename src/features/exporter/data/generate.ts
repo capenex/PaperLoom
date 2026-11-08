@@ -92,9 +92,30 @@ function shouldWriteMediaFile(source: string): boolean {
   return trimmed !== '' && !trimmed.startsWith('data:')
 }
 
+function allNodesOf(document: PaperDocument): readonly PaperDocument['nodes'][number][] {
+  if (document.subCanvases === undefined) return document.nodes
+  const subNodes = Object.values(document.subCanvases).flatMap((sub) => sub.nodes)
+  return [...document.nodes, ...subNodes]
+}
+
+function mapAllNodes(
+  document: PaperDocument,
+  mapper: (node: PaperDocument['nodes'][number]) => PaperDocument['nodes'][number],
+): PaperDocument {
+  const nodes = document.nodes.map(mapper)
+  if (document.subCanvases === undefined) return { ...document, nodes }
+  const subCanvases = Object.fromEntries(
+    Object.entries(document.subCanvases).map(([id, sub]) => [
+      id,
+      { ...sub, nodes: sub.nodes.map(mapper) },
+    ]),
+  )
+  return { ...document, nodes, subCanvases }
+}
+
 function collectMediaSources(document: PaperDocument): readonly string[] {
   const sources: string[] = []
-  for (const node of document.nodes) {
+  for (const node of allNodesOf(document)) {
     if (node.content.kind !== 'image') continue
     const source = node.content.src
     if (!shouldWriteMediaFile(source) || sources.includes(source)) continue
@@ -108,10 +129,10 @@ function referenceAnchorsOf(richText: string): NodeListOf<HTMLAnchorElement> {
   return parsed.querySelectorAll(`a[${REFERENCE_KIND_ATTR}]`)
 }
 
-/** 收集富文本引用锚点的主资源与 PDF 预览图地址 */
+/** 收集富文本引用锚点的主资源与 PDF 预览图地址（含支线子画布） */
 function collectReferenceSources(document: PaperDocument): readonly string[] {
   const sources: string[] = []
-  for (const node of document.nodes) {
+  for (const node of allNodesOf(document)) {
     if (node.content.kind !== 'text') continue
     referenceAnchorsOf(node.content.richText).forEach((anchor) => {
       for (const source of [
@@ -196,15 +217,12 @@ function rewriteMediaSources(
     pathBySource.set(asset.source, asset.path)
   }
 
-  return {
-    ...document,
-    nodes: document.nodes.map((node) => {
-      if (node.content.kind !== 'image') return node
-      const path = pathBySource.get(node.content.src)
-      if (path === undefined) return node
-      return { ...node, content: { ...node.content, src: `./${path}` } }
-    }),
-  }
+  return mapAllNodes(document, (node) => {
+    if (node.content.kind !== 'image') return node
+    const path = pathBySource.get(node.content.src)
+    if (path === undefined) return node
+    return { ...node, content: { ...node.content, src: `./${path}` } }
+  })
 }
 
 function rewriteRichTextReferences(richText: string, pathBySource: Map<string, string>): string | null {
@@ -237,15 +255,12 @@ function rewriteReferenceSources(
     pathBySource.set(asset.source, asset.path)
   }
 
-  return {
-    ...document,
-    nodes: document.nodes.map((node) => {
-      if (node.content.kind !== 'text') return node
-      const rewritten = rewriteRichTextReferences(node.content.richText, pathBySource)
-      if (rewritten === null) return node
-      return { ...node, content: { ...node.content, richText: rewritten } }
-    }),
-  }
+  return mapAllNodes(document, (node) => {
+    if (node.content.kind !== 'text') return node
+    const rewritten = rewriteRichTextReferences(node.content.richText, pathBySource)
+    if (rewritten === null) return node
+    return { ...node, content: { ...node.content, richText: rewritten } }
+  })
 }
 
 /** 按需加载 pdf.js 源码文本：只在真正导出时才把这一大块字符串拉进内存 */

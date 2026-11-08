@@ -26,7 +26,9 @@ export function useReferencePreview(
 
   const openPreview = useCallback(
     (reference: PaperReference, anchor: HTMLElement) => {
-      show({ reference, ...placeReferencePreview(anchor.getBoundingClientRect()) })
+      const hostNode = anchor.closest('[data-node-id]')
+      const nodeId = hostNode?.getAttribute('data-node-id') ?? undefined
+      show({ nodeId, reference, ...placeReferencePreview(anchor.getBoundingClientRect()) })
     },
     [show],
   )

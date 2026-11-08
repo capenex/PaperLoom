@@ -18,24 +18,24 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     return
   }
 
-  var nodes = data.document.nodes
-  var rootIds = Array.isArray(data.document.rootIds) ? data.document.rootIds : []
+  var subCanvases = data.document.subCanvases || {}
   var preset = data.document.defaults || {}
   var defaultWidth = typeof preset.nodeWidth === 'number' ? preset.nodeWidth : FALLBACK_WIDTH
   var defaultHeight = typeof preset.nodeHeight === 'number' ? preset.nodeHeight : FALLBACK_HEIGHT
   var defaultFontSize = typeof preset.fontSize === 'number' ? preset.fontSize : FALLBACK_FONT_SIZE
 
+  var activeCanvasId = null
+  var canvasStack = []
+  var nodes = []
+  var rootIds = []
   var nodeById = {}
   var childrenOf = {}
-  nodes.forEach(function (node) {
-    nodeById[node.id] = node
-    if (node.parentId === null) return
-    if (!childrenOf[node.parentId]) childrenOf[node.parentId] = []
-    childrenOf[node.parentId].push(node)
-  })
+  var positions = {}
+  var width = MIN_STAGE_SIZE
+  var height = MIN_STAGE_SIZE
 
   function sizeOf(node) {
-    var layout = node.layout || {}
+    var layout = (node && node.layout) || {}
     return {
       width: typeof layout.width === 'number' ? layout.width : defaultWidth,
       height: typeof layout.height === 'number' ? layout.height : defaultHeight,
@@ -47,6 +47,7 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     var columnWidths = []
     var maxNodeHeight = 0
     function measure(node, depth) {
+      if (!node) return
       var size = sizeOf(node)
       if (size.width > (columnWidths[depth] || 0)) columnWidths[depth] = size.width
       if (size.height > maxNodeHeight) maxNodeHeight = size.height
@@ -91,55 +92,164 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     return local
   }
 
-  // 每棵子树按自己根节点的锚点定位，再整体平移进舞台坐标
-  var placed = []
-  rootIds.forEach(function (rootId) {
-    var root = nodeById[rootId]
-    if (!root) return
-    var anchor = root.layout || {}
-    var local = layoutSubtree(rootId)
-    Object.keys(local).forEach(function (id) {
-      placed.push({
-        id: id,
-        x: (anchor.x || 0) + local[id].x,
-        y: (anchor.y || 0) + local[id].y,
+  function computeSliceLayout(sliceNodes, sliceRootIds) {
+    nodes = Array.isArray(sliceNodes) ? sliceNodes : []
+    rootIds = Array.isArray(sliceRootIds) ? sliceRootIds : []
+    nodeById = {}
+    childrenOf = {}
+    nodes.forEach(function (node) {
+      nodeById[node.id] = node
+      if (node.parentId === null) return
+      if (!childrenOf[node.parentId]) childrenOf[node.parentId] = []
+      childrenOf[node.parentId].push(node)
+    })
+
+    var placed = []
+    rootIds.forEach(function (rootId) {
+      var root = nodeById[rootId]
+      if (!root) return
+      var anchor = root.layout || {}
+      var local = layoutSubtree(rootId)
+      Object.keys(local).forEach(function (id) {
+        placed.push({
+          id: id,
+          x: (anchor.x || 0) + local[id].x,
+          y: (anchor.y || 0) + local[id].y,
+        })
       })
     })
-  })
 
-  if (placed.length === 0) {
+    if (placed.length === 0) {
+      positions = {}
+      width = MIN_STAGE_SIZE
+      height = MIN_STAGE_SIZE
+      return false
+    }
+
+    var minX = Infinity
+    var minY = Infinity
+    var maxX = -Infinity
+    var maxY = -Infinity
+    placed.forEach(function (item) {
+      var size = sizeOf(nodeById[item.id])
+      minX = Math.min(minX, item.x - size.width / 2)
+      minY = Math.min(minY, item.y - size.height / 2)
+      maxX = Math.max(maxX, item.x + size.width / 2)
+      maxY = Math.max(maxY, item.y + size.height / 2)
+    })
+
+    var shiftX = Math.max(0, STAGE_PADDING_X - minX)
+    var shiftY = Math.max(0, STAGE_PADDING_Y - minY)
+    positions = {}
+    placed.forEach(function (item) {
+      positions[item.id] = { x: item.x + shiftX, y: item.y + shiftY }
+    })
+    width = Math.max(maxX + shiftX + STAGE_PADDING_X, MIN_STAGE_SIZE)
+    height = Math.max(maxY + shiftY + STAGE_PADDING_Y, MIN_STAGE_SIZE)
+    return true
+  }
+
+  if (!computeSliceLayout(data.document.nodes, data.document.rootIds)) {
     app.textContent = '未找到根节点'
     return
   }
 
-  var minX = Infinity
-  var minY = Infinity
-  var maxX = -Infinity
-  var maxY = -Infinity
-  placed.forEach(function (item) {
-    var size = sizeOf(nodeById[item.id])
-    minX = Math.min(minX, item.x - size.width / 2)
-    minY = Math.min(minY, item.y - size.height / 2)
-    maxX = Math.max(maxX, item.x + size.width / 2)
-    maxY = Math.max(maxY, item.y + size.height / 2)
-  })
+  var DEFAULT_IMAGE_EVENTS = [
+    { id: 'default-image-open-detail', target: 'node', trigger: 'second-click', action: { type: 'open-detail' } },
+  ]
+  var DEFAULT_FILE_EVENTS = [
+    { id: 'default-file-open-detail', target: 'node', trigger: 'double-click', action: { type: 'open-detail' } },
+  ]
+  var DEFAULT_REFERENCE_EVENTS = [
+    { id: 'default-reference-open-preview', target: 'reference', trigger: 'click', action: { type: 'open-reference-preview' } },
+    { id: 'default-reference-open-detail', target: 'reference', trigger: 'double-click', action: { type: 'open-detail' } },
+    { id: 'default-popup-open-detail', target: 'reference-popup', trigger: 'click', action: { type: 'open-detail' } },
+  ]
 
-  // 只有内容越出舞台左上角时才整体平移，编辑器里拖出来的位置原样保留
-  var shiftX = Math.max(0, STAGE_PADDING_X - minX)
-  var shiftY = Math.max(0, STAGE_PADDING_Y - minY)
-
-  var positions = {}
-  placed.forEach(function (item) {
-    positions[item.id] = {
-      x: item.x + shiftX,
-      y: item.y + shiftY,
+  function defaultEventsForNode(node) {
+    var content = (node && node.content) || {}
+    if (content.kind === 'image') return DEFAULT_IMAGE_EVENTS
+    if (content.kind === 'file') return DEFAULT_FILE_EVENTS
+    if (content.kind === 'text' && typeof content.richText === 'string' && content.richText.indexOf('data-pl-ref') !== -1) {
+      return DEFAULT_REFERENCE_EVENTS
     }
-  })
+    return []
+  }
 
-  var width = Math.max(maxX + shiftX + STAGE_PADDING_X, MIN_STAGE_SIZE)
-  var height = Math.max(maxY + shiftY + STAGE_PADDING_Y, MIN_STAGE_SIZE)
+  function resolveNodeEvents(node) {
+    if (!node) return []
+    return Array.isArray(node.events) ? node.events : defaultEventsForNode(node)
+  }
 
-  var EXPANDED_MEDIA_SCALE = 3
+  function isActionActiveInCanvas(action, canvasId) {
+    if (!action || !action.type || action.type === 'edit-node') return false
+    if (action.type === 'open-canvas') {
+      return Boolean(action.canvasId && action.canvasId !== canvasId && subCanvases[action.canvasId])
+    }
+    return true
+  }
+
+  function findTriggeredEvent(node, trigger, canvasId, target) {
+    var expectedTarget = target || 'node'
+    var list = resolveNodeEvents(node)
+    for (var i = 0; i < list.length; i += 1) {
+      var binding = list[i]
+      var bTarget = (binding && binding.target) || 'node'
+      if (bTarget === expectedTarget && binding.trigger === trigger && isActionActiveInCanvas(binding.action, canvasId)) {
+        return binding
+      }
+    }
+    return null
+  }
+
+  function findBoundSubCanvasId(node, canvasId) {
+    var list = resolveNodeEvents(node)
+    for (var i = 0; i < list.length; i += 1) {
+      var binding = list[i]
+      var bTarget = (binding && binding.target) || 'node'
+      if (
+        bTarget === 'node' &&
+        binding.action &&
+        binding.action.type === 'open-canvas' &&
+        binding.action.canvasId &&
+        binding.action.canvasId !== canvasId &&
+        subCanvases[binding.action.canvasId]
+      ) {
+        return binding.action.canvasId
+      }
+    }
+    return null
+  }
+
+  function findNodeAcrossDocument(nodeId) {
+    var mainList = data.document.nodes || []
+    for (var i = 0; i < mainList.length; i += 1) {
+      if (mainList[i].id === nodeId) return mainList[i]
+    }
+    var subIds = Object.keys(subCanvases)
+    for (var j = 0; j < subIds.length; j += 1) {
+      var sNodes = (subCanvases[subIds[j]] && subCanvases[subIds[j]].nodes) || []
+      for (var k = 0; k < sNodes.length; k += 1) {
+        if (sNodes[k].id === nodeId) return sNodes[k]
+      }
+    }
+    return null
+  }
+
+  function summarizeNodeTitle(node) {
+    if (!node || !node.content) return '支线画布'
+    var c = node.content
+    if (c.kind === 'title') return (c.title || '').trim() || '未命名标题'
+    if (c.kind === 'image') return (c.alt || '').trim() || '图片支线'
+    if (c.kind === 'file') return (c.fileName || '').trim() || '文件支线'
+    var tmp = document.createElement('div')
+    tmp.innerHTML = c.richText || ''
+    var txt = (tmp.textContent || '').trim()
+    if (!txt) return '支线探索'
+    return txt.length > 18 ? txt.slice(0, 18) + '…' : txt
+  }
+
+  var EXPANDED_MEDIA_SCALE = 1.5
   var COLLISION_GAP = 24
 
   function isImageNode(node) {

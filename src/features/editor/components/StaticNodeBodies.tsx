@@ -1,3 +1,5 @@
+import { GitBranch, Link2 } from 'lucide-react'
+
 import type { FileNodeContent, TitleNodeContent } from '@/shared/types/paper'
 import { renderStaticMarkdownHtml } from '../lib/staticMarkdown'
 
@@ -9,6 +11,36 @@ interface TitleNodeBodyProps {
 interface FileNodeBodyProps {
   readonly content: FileNodeContent
   readonly fontSize: number
+}
+
+/** 节点右上角标识角标：提示已绑定支线画布，或当前为支线画布内的同源起点节点 */
+export function NodeBadge({
+  hasSubCanvas,
+  isHostRoot,
+}: Readonly<{ hasSubCanvas: boolean; isHostRoot: boolean }>) {
+  if (hasSubCanvas) {
+    return (
+      <span
+        aria-label="已绑定支线画布，双击展开"
+        className="pointer-events-none absolute top-1.5 right-1.5 z-10 inline-flex items-center gap-1 rounded-md border border-primary/25 bg-white/95 px-1.5 py-0.5 text-[10px] font-semibold text-primary shadow-2xs backdrop-blur-xs"
+      >
+        <GitBranch className="size-2.5" aria-hidden="true" />
+        <span>支线</span>
+      </span>
+    )
+  }
+  if (isHostRoot) {
+    return (
+      <span
+        aria-label="与上级画布实时同步的同源起点节点"
+        className="pointer-events-none absolute top-1.5 right-1.5 z-10 inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50/95 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 shadow-2xs backdrop-blur-xs"
+      >
+        <Link2 className="size-2.5" aria-hidden="true" />
+        <span>同源起点</span>
+      </span>
+    )
+  }
+  return null
 }
 
 /** 纯标题节点正文：以默认样式居中展示主标题与可选副标题 */
@@ -71,7 +103,7 @@ export function FileNodeBody({ content, fontSize }: Readonly<FileNodeBodyProps>)
         />
       ) : (
         <pre
-          className="m-0 min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-all px-3 py-2 font-mono leading-snug text-slate-700"
+          className="m-0 min-h-0 flex-1 overflow-hidden px-3 py-2 font-mono leading-snug break-all whitespace-pre-wrap text-slate-700"
           style={{ fontSize: Math.max(11, Math.round(fontSize * 0.78)) }}
         >
           {content.text}

@@ -26,8 +26,8 @@ export const MIN_CROP_SIZE = 12
 export const CROP_PAGE_WIDTH = 760
 export const CROP_PAGE_HEIGHT = 540
 
-/** 详情查看器的页面栅格宽度：按此宽度渲染，再由 CSS 缩放到面板内 */
-export const DETAIL_PAGE_WIDTH = 1000
+/** 详情查看器的页面栅格宽度：按此高分辨率宽度渲染，以保证滚轮放大时依然清晰 */
+export const DETAIL_PAGE_WIDTH = 1600
 
 let workerConfigured = false
 

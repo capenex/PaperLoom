@@ -1,6 +1,7 @@
-import type { PaperReference } from '@/shared/types/paper'
+import type { NodeId, PaperReference } from '@/shared/types/paper'
 
 export interface ReferencePreview {
+  readonly nodeId?: NodeId | undefined
   readonly reference: PaperReference
   readonly x: number
   readonly y: number

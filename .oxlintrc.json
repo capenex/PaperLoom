@@ -7,8 +7,11 @@
     "pedantic": "error"
   },
   "rules": {
+    "import/max-dependencies": ["error", { "max": 15 }],
     "import/no-cycle": "error",
     "import/no-unassigned-import": "off",
+    "max-lines": ["error", { "max": 500, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": ["error", { "max": 90, "skipBlankLines": true, "skipComments": true }],
     "no-inline-comments": "off",
     "react/only-export-components": ["error", { "allowConstantExport": true }],
     "react/react-in-jsx-scope": "off",
@@ -23,6 +26,13 @@
       "files": ["src/shared/components/ui/**/*.tsx"],
       "rules": {
         "react/only-export-components": "off"
+      }
+    },
+    {
+      "files": ["src/**/*.test.ts"],
+      "rules": {
+        "max-lines": "off",
+        "max-lines-per-function": "off"
       }
     }
   ]

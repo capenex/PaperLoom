@@ -1,3 +1,4 @@
+import { parseReferenceAnchor, REFERENCE_KIND_ATTR } from '@/shared/lib/reference'
 import type {
   NodeId,
   PaperNode,
@@ -27,6 +28,16 @@ function detailFromReference(reference: PaperReference): DetailContent {
   return { type: 'pdf', src: reference.src, page: reference.page ?? 1, label: reference.label }
 }
 
+/** 从富文本节点中提取首个本地引用（如内嵌的 PDF 引用链接），供节点级 open-detail 事件直接调用 */
+function findFirstEmbeddedReference(richText: string): PaperReference | null {
+  if (typeof DOMParser === 'undefined' || !richText.includes(REFERENCE_KIND_ATTR)) {
+    return null
+  }
+  const doc = new DOMParser().parseFromString(richText, 'text/html')
+  const anchor = doc.querySelector(`a[${REFERENCE_KIND_ATTR}]`)
+  return anchor === null ? null : parseReferenceAnchor(anchor)
+}
+
 function findNodeDetailContent(
   nodes: readonly PaperNode[],
   nodeId: NodeId | null,
@@ -44,6 +55,10 @@ function findNodeDetailContent(
       format: node.content.format,
       text: node.content.text,
     }
+  }
+  if (node.content.kind === 'text') {
+    const embeddedRef = findFirstEmbeddedReference(node.content.richText)
+    if (embeddedRef !== null) return detailFromReference(embeddedRef)
   }
   return null
 }

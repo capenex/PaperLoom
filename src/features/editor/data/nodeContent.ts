@@ -1,7 +1,15 @@
+import {
+  DEFAULT_REFERENCE_EVENTS,
+  defaultEventsForKind,
+  resolveBindingTarget,
+  resolveNodeEvents,
+} from '@/shared/lib/nodeEvents'
+import { REFERENCE_KIND_ATTR } from '@/shared/lib/reference'
 import type {
   FileNodeContent,
   ImageNodeContent,
   NodeContent,
+  NodeEventBinding,
   NodeId,
   PaperDocument,
   PaperNode,
@@ -44,7 +52,27 @@ function defaultContentForKind(kind: NodeContent['kind']): NodeContent {
   return { kind: 'text', richText: '' }
 }
 
-/** 更新文字节点的富文本内容；其他类型节点不会被修改 */
+function mergeEventsForNewKind(
+  node: PaperNode,
+  nextKind: NodeContent['kind'],
+): readonly NodeEventBinding[] {
+  const customEvents = resolveNodeEvents(node).filter(
+    (binding) =>
+      resolveBindingTarget(binding) === 'node' &&
+      binding.action.type !== 'open-detail' &&
+      binding.action.type !== 'edit-node',
+  )
+  const kindDefaults = defaultEventsForKind(nextKind)
+  const merged = [...customEvents]
+  for (const def of kindDefaults) {
+    if (!merged.some((item) => item.trigger === def.trigger)) {
+      merged.push(def)
+    }
+  }
+  return merged
+}
+
+/** 更新文字节点的富文本内容；首次插入引用锚点且已有自定义事件时自动补齐默认引用事件 */
 export function updateTextNodeContent(
   document: PaperDocument,
   nodeId: NodeId,
@@ -53,9 +81,25 @@ export function updateTextNodeContent(
   const target = document.nodes.find((node) => node.id === nodeId)
   if (target === undefined || target.content.kind !== 'text') return document
 
+  const hadRef = target.content.richText.includes(REFERENCE_KIND_ATTR)
+  const hasRef = richText.includes(REFERENCE_KIND_ATTR)
+  const shouldAppendRefDefaults =
+    !hadRef &&
+    hasRef &&
+    target.events !== undefined &&
+    !target.events.some((item) => resolveBindingTarget(item) !== 'node')
+
   const nodes = document.nodes.map((node) => {
     if (node.id !== nodeId) return node
-    return { ...node, content: { ...target.content, richText } }
+    const events =
+      shouldAppendRefDefaults && node.events !== undefined
+        ? [...node.events, ...DEFAULT_REFERENCE_EVENTS]
+        : node.events
+    return {
+      ...node,
+      content: { ...target.content, richText },
+      ...(events === undefined ? {} : { events }),
+    }
   })
 
   return replaceNodes(document, nodes)
@@ -86,9 +130,12 @@ export function changeNodeKind(
   const target = document.nodes.find((node) => node.id === nodeId)
   if (target === undefined || target.content.kind === kind) return document
   const content = defaultContentForKind(kind)
+  const events = mergeEventsForNewKind(target, kind)
   return replaceNodes(
     document,
-    document.nodes.map((node): PaperNode => (node.id === nodeId ? { ...node, content } : node)),
+    document.nodes.map(
+      (node): PaperNode => (node.id === nodeId ? { ...node, content, events } : node),
+    ),
   )
 }
 

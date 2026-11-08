@@ -14,6 +14,53 @@ export type NodeId = string
 /** 文档唯一标识 */
 export type DocumentId = string
 
+/** 支线子画布唯一标识 */
+export type CanvasId = string
+
+// ============================================================================
+// 节点事件绑定
+// ============================================================================
+
+/** 节点事件的作用对象：整张节点卡片、节点内引用链接，或引用预览小窗 */
+export type NodeEventTarget = 'node' | 'reference' | 'reference-popup'
+
+/** 节点事件触发时机 */
+export type NodeEventTrigger =
+  | 'double-click'
+  | 'second-click'
+  | 'click'
+
+/** 画布层级面包屑项 */
+export interface BreadcrumbItem {
+  readonly canvasId: CanvasId | null
+  readonly label: string
+}
+
+/** 节点事件执行动作 */
+export type NodeEventAction =
+  | {
+      readonly type: 'edit-node'
+    }
+  | {
+      readonly type: 'open-detail'
+    }
+  | {
+      readonly type: 'open-reference-preview'
+    }
+  | {
+      readonly type: 'open-canvas'
+      readonly canvasId: CanvasId
+    }
+
+/** 绑定在节点上的单条交互事件 */
+export interface NodeEventBinding {
+  readonly id: string
+  /** 事件绑定的目标对象；缺省为 'node'（节点本身） */
+  readonly target?: NodeEventTarget
+  readonly trigger: NodeEventTrigger
+  readonly action: NodeEventAction
+}
+
 // ============================================================================
 // 节点
 // ============================================================================
@@ -107,6 +154,17 @@ export interface PaperNode {
   readonly parentId: NodeId | null
   readonly content: NodeContent
   readonly layout: NodeLayout
+  /** 绑定在该节点上的交互事件列表；未设置时按节点类型使用默认事件 */
+  readonly events?: readonly NodeEventBinding[]
+}
+
+/** 独立于主画布的支线子画布（宿主节点同时存在于上级画布与该子画布中） */
+export interface SubCanvas {
+  readonly id: CanvasId
+  /** 关联的宿主节点 ID（两侧共享最新 content，各自拥有独立 layout 与子树） */
+  readonly hostNodeId: NodeId
+  readonly nodes: readonly PaperNode[]
+  readonly rootIds: readonly NodeId[]
 }
 
 // ============================================================================
@@ -144,6 +202,8 @@ export interface PaperDocument {
   readonly rootIds: readonly NodeId[]
   /** 文档级预设（节点尺寸与文字字号） */
   readonly defaults: DocumentDefaults
+  /** 支线子画布字典（按 canvasId 索引） */
+  readonly subCanvases?: Readonly<Record<CanvasId, SubCanvas>>
 }
 
 // ============================================================================

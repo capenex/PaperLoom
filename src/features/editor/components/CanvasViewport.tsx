@@ -2,8 +2,10 @@ import type { ReactNode } from 'react'
 import { cn } from 'cn'
 
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
+import type { ViewportFocusTarget } from '../hooks/useCanvasViewport'
 
 interface CanvasViewportProps {
+  readonly focusTarget?: ViewportFocusTarget | null | undefined
   readonly onBackgroundClick: () => void
   readonly onBackgroundContextMenu: () => void
   /** 额外的空白点击抑制条件：节点拖动结束后的余波点击不应取消选中 */
@@ -13,6 +15,7 @@ interface CanvasViewportProps {
 
 /** 可平移缩放的画布视口，节点与连线作为被变换的世界层内容 */
 export function CanvasViewport({
+  focusTarget,
   onBackgroundClick,
   onBackgroundContextMenu,
   shouldIgnoreBackgroundClick,
@@ -27,12 +30,13 @@ export function CanvasViewport({
     onPointerMove,
     onPointerUp,
     shouldIgnoreClick,
-  } = useCanvasViewport()
+  } = useCanvasViewport(focusTarget)
 
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- 画布空白处点击仅用于取消选中，键盘等价操作是 Escape
     <div
       ref={viewportRef}
+      data-canvas-viewport="true"
       role="application"
       aria-label="演示画布"
       className={cn(

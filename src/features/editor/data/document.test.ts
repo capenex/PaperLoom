@@ -240,8 +240,8 @@ void test('inbox image timestamp naming and addImageNode create multimedia nodes
   assert.equal(doc.rootIds.includes('dropped-img-root'), true)
 })
 
-void test('displaceLayoutForExpandedMedia scales to 3x and pushes surrounding nodes outward', () => {
-  assert.equal(EXPANDED_MEDIA_SCALE, 3)
+void test('displaceLayoutForExpandedMedia scales to 1.5x and pushes surrounding nodes outward', () => {
+  assert.equal(EXPANDED_MEDIA_SCALE, 1.5)
   let doc = createInitialDocument()
   const rootId = doc.rootIds[0]
   const imageNode = doc.nodes[1]

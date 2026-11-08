@@ -1,7 +1,10 @@
 import { useRef } from 'react'
 
 import type {
+  BreadcrumbItem,
+  CanvasId,
   ImageNodeContent,
+  NodeEventAction,
   NodeId,
   PaperDocument,
   PaperReference,
@@ -11,11 +14,16 @@ import type { Point } from '../data/layout'
 import { useDocumentLayout } from '../hooks/useDocumentLayout'
 import { useImagePasteDrop } from '../hooks/useImagePasteDrop'
 import { useNodeDrag } from '../hooks/useNodeDrag'
+import { CanvasBreadcrumbs } from './CanvasBreadcrumbs'
 import { CanvasViewport } from './CanvasViewport'
 import { EditorStage } from './EditorStage'
 
 interface EditorCanvasProps {
   readonly document: PaperDocument
+  readonly activeCanvasId?: CanvasId | null | undefined
+  readonly activeHostNodeId?: NodeId | null | undefined
+  readonly breadcrumbs?: readonly BreadcrumbItem[] | undefined
+  readonly canPopSubCanvasWithEscape?: boolean | undefined
   readonly selectedNodeId: NodeId | null
   readonly editingNodeId: NodeId | null
   readonly expandedMediaNodeId: NodeId | null
@@ -25,7 +33,9 @@ interface EditorCanvasProps {
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
   readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
-  readonly onOpenMediaDetail: (nodeId: NodeId) => void
+  readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
+  readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined
+  readonly onPopSubCanvas?: (() => void) | undefined
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
   readonly onBackgroundClick: () => void
@@ -48,13 +58,33 @@ function DropHintBanner() {
   )
 }
 
-/** 画布区：装配布局、可平移缩放视口、Alt 拖动结构编辑与图片粘贴/拖入创建多媒体节点 */
+function resolveFocusTarget(
+  document: PaperDocument,
+  editingNodeId: NodeId | null,
+  layout: ReturnType<typeof useDocumentLayout>,
+) {
+  if (editingNodeId === null) return null
+  const node = document.nodes.find((item) => item.id === editingNodeId)
+  if (node?.content.kind !== 'text') return null
+  const position = layout.positions.get(editingNodeId)
+  if (position === undefined) return null
+  return {
+    key: editingNodeId,
+    x: position.x,
+    y: position.y,
+    stageWidth: layout.width,
+    stageHeight: layout.height,
+  }
+}
+
+/** 画布区：装配布局、支线面包屑导航、可平移缩放视口、Alt 拖动结构编辑与图片粘贴/拖入 */
 export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
   const { document } = props
   const stageRef = useRef<HTMLDivElement | null>(null)
   const layout = useDocumentLayout(document)
   const drag = useNodeDrag({ ...props, document, layout, stageRef })
   const imagePasteDrop = useImagePasteDrop({ ...props, layout, stageRef })
+  const focusTarget = resolveFocusTarget(document, props.editingNodeId, layout)
 
   return (
     <div
@@ -63,7 +93,19 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
       onDragLeave={imagePasteDrop.onDragLeave}
       onDrop={imagePasteDrop.onDrop}
     >
+      {props.breadcrumbs !== undefined &&
+        props.breadcrumbs.length > 0 &&
+        props.onNavigateCanvas !== undefined &&
+        props.onPopSubCanvas !== undefined && (
+          <CanvasBreadcrumbs
+            breadcrumbs={props.breadcrumbs}
+            canPopWithEscape={Boolean(props.canPopSubCanvasWithEscape)}
+            onNavigate={props.onNavigateCanvas}
+            onPop={props.onPopSubCanvas}
+          />
+        )}
       <CanvasViewport
+        focusTarget={focusTarget}
         shouldIgnoreBackgroundClick={drag.shouldSuppressClick}
         onBackgroundClick={props.onBackgroundClick}
         onBackgroundContextMenu={props.onBackgroundContextMenu}

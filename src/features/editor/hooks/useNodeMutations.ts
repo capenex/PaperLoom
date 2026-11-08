@@ -3,8 +3,10 @@ import type { Dispatch, SetStateAction } from 'react'
 
 import { createId } from '@/shared/lib/id'
 import type {
+  CanvasId,
   ImageNodeContent,
   NodeContent,
+  NodeEventBinding,
   NodeId,
   NodeLayout,
   PaperDocument,
@@ -15,16 +17,20 @@ import {
   addChildNode,
   addImageNode,
   addSiblingNode,
+  applyInCanvas,
+  canDeleteNodeInCanvas,
   changeNodeKind,
   removeNode,
   updateFileNodeContent,
   updateImageNodeContent,
+  updateNodeEventsInDocument,
   updateNodeLayout,
   updateTextNodeContent,
   updateTitleNodeContent,
 } from '../data/document'
 
 interface NodeMutationsOptions {
+  readonly activeCanvasId: CanvasId | null
   readonly setDocument: Dispatch<SetStateAction<PaperDocument>>
   readonly setSelectedNodeId: Dispatch<SetStateAction<NodeId | null>>
   readonly setEditingNodeId: Dispatch<SetStateAction<NodeId | null>>
@@ -47,119 +53,171 @@ export interface NodeMutations {
     text: string,
   ) => void
   readonly updateLayout: (nodeId: NodeId, patch: Partial<NodeLayout>) => void
+  readonly updateEvents: (nodeId: NodeId, events: readonly NodeEventBinding[]) => void
 }
 
-function useNodeTreeActions({
+function useNodeInsertActions({
+  activeCanvasId,
+  setDocument,
+  setSelectedNodeId,
+  setEditingNodeId,
+}: Readonly<NodeMutationsOptions>) {
+  const addChild = useCallback(
+    (parentId: NodeId) => {
+      const newNodeId = createId()
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) => addChildNode(slice, parentId, newNodeId)),
+      )
+      setSelectedNodeId(newNodeId)
+      setEditingNodeId(null)
+    },
+    [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId],
+  )
+  const addSibling = useCallback(
+    (nodeId: NodeId) => {
+      const newNodeId = createId()
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) => addSiblingNode(slice, nodeId, newNodeId)),
+      )
+      setSelectedNodeId(newNodeId)
+      setEditingNodeId(null)
+    },
+    [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId],
+  )
+  const addImage = useCallback(
+    (content: ImageNodeContent, target?: AddImageNodeTarget) => {
+      const newNodeId = createId()
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          addImageNode(slice, newNodeId, content, target),
+        ),
+      )
+      setSelectedNodeId(newNodeId)
+      setEditingNodeId(null)
+    },
+    [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId],
+  )
+  return { addChild, addSibling, addImage }
+}
+
+function useNodeDeleteAction({
+  activeCanvasId,
   setDocument,
   setSelectedNodeId,
   setEditingNodeId,
   setExpandedMediaNodeId,
 }: Readonly<NodeMutationsOptions>) {
-  const addChild = useCallback(
-    (parentId: NodeId) => {
-      const newNodeId = createId()
-      setDocument((current) => addChildNode(current, parentId, newNodeId))
-      setSelectedNodeId(newNodeId)
-      setEditingNodeId(null)
-    },
-    [setDocument, setSelectedNodeId, setEditingNodeId],
-  )
-  const addSibling = useCallback(
+  return useCallback(
     (nodeId: NodeId) => {
-      const newNodeId = createId()
-      setDocument((current) => addSiblingNode(current, nodeId, newNodeId))
-      setSelectedNodeId(newNodeId)
-      setEditingNodeId(null)
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) => {
+          const target = slice.nodes.find((item) => item.id === nodeId)
+          if (target === undefined || !canDeleteNodeInCanvas(curr, activeCanvasId, target)) {
+            return slice
+          }
+          return removeNode(slice, nodeId)
+        }),
+      )
+      setSelectedNodeId((curr) => (curr === nodeId ? null : curr))
+      setEditingNodeId((curr) => (curr === nodeId ? null : curr))
+      setExpandedMediaNodeId((curr) => (curr === nodeId ? null : curr))
     },
-    [setDocument, setSelectedNodeId, setEditingNodeId],
+    [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId, setExpandedMediaNodeId],
   )
-  const addImage = useCallback(
-    (content: ImageNodeContent, target?: AddImageNodeTarget) => {
-      const newNodeId = createId()
-      setDocument((current) => addImageNode(current, newNodeId, content, target))
-      setSelectedNodeId(newNodeId)
-      setEditingNodeId(null)
-    },
-    [setDocument, setSelectedNodeId, setEditingNodeId],
-  )
-  const deleteNode = useCallback(
-    (nodeId: NodeId) => {
-      setDocument((current) => removeNode(current, nodeId))
-      setSelectedNodeId((current) => (current === nodeId ? null : current))
-      setEditingNodeId((current) => (current === nodeId ? null : current))
-      setExpandedMediaNodeId((current) => (current === nodeId ? null : current))
-    },
-    [setDocument, setSelectedNodeId, setEditingNodeId, setExpandedMediaNodeId],
-  )
-
-  return { addChild, addSibling, addImage, deleteNode }
 }
 
 function useNodeTextAndKindActions({
+  activeCanvasId,
   setDocument,
   setEditingNodeId,
   setExpandedMediaNodeId,
 }: Readonly<NodeMutationsOptions>) {
   const updateContent = useCallback(
     (nodeId: NodeId, richText: string) => {
-      setDocument((current) => updateTextNodeContent(current, nodeId, richText))
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          updateTextNodeContent(slice, nodeId, richText),
+        ),
+      )
     },
-    [setDocument],
+    [activeCanvasId, setDocument],
   )
   const updateTitle = useCallback(
     (nodeId: NodeId, title: string, subtitle: string) => {
-      setDocument((current) => updateTitleNodeContent(current, nodeId, title, subtitle))
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          updateTitleNodeContent(slice, nodeId, title, subtitle),
+        ),
+      )
     },
-    [setDocument],
+    [activeCanvasId, setDocument],
   )
   const changeKind = useCallback(
     (nodeId: NodeId, kind: NodeContent['kind']) => {
-      setDocument((current) => changeNodeKind(current, nodeId, kind))
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) => changeNodeKind(slice, nodeId, kind)),
+      )
       if (kind !== 'text' && kind !== 'title') {
-        setEditingNodeId((current) => (current === nodeId ? null : current))
+        setEditingNodeId((curr) => (curr === nodeId ? null : curr))
       }
       if (kind !== 'image') {
-        setExpandedMediaNodeId((current) => (current === nodeId ? null : current))
+        setExpandedMediaNodeId((curr) => (curr === nodeId ? null : curr))
       }
     },
-    [setDocument, setEditingNodeId, setExpandedMediaNodeId],
+    [activeCanvasId, setDocument, setEditingNodeId, setExpandedMediaNodeId],
   )
-
   return { updateContent, updateTitle, changeKind }
 }
 
 function useNodeAssetAndLayoutActions({
+  activeCanvasId,
   setDocument,
   setEditingNodeId,
 }: Readonly<NodeMutationsOptions>) {
   const updateImage = useCallback(
     (nodeId: NodeId, src: string, alt: string) => {
-      setDocument((current) => updateImageNodeContent(current, nodeId, src, alt))
-      setEditingNodeId((current) => (current === nodeId ? null : current))
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          updateImageNodeContent(slice, nodeId, src, alt),
+        ),
+      )
+      setEditingNodeId((curr) => (curr === nodeId ? null : curr))
     },
-    [setDocument, setEditingNodeId],
+    [activeCanvasId, setDocument, setEditingNodeId],
   )
   const updateFile = useCallback(
     (nodeId: NodeId, fileName: string, format: StaticFileFormat, text: string) => {
-      setDocument((current) => updateFileNodeContent(current, nodeId, fileName, format, text))
-      setEditingNodeId((current) => (current === nodeId ? null : current))
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          updateFileNodeContent(slice, nodeId, fileName, format, text),
+        ),
+      )
+      setEditingNodeId((curr) => (curr === nodeId ? null : curr))
     },
-    [setDocument, setEditingNodeId],
+    [activeCanvasId, setDocument, setEditingNodeId],
   )
   const updateLayout = useCallback(
     (nodeId: NodeId, patch: Partial<NodeLayout>) => {
-      setDocument((current) => updateNodeLayout(current, nodeId, patch))
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) => updateNodeLayout(slice, nodeId, patch)),
+      )
     },
-    [setDocument],
+    [activeCanvasId, setDocument],
   )
-
-  return { updateImage, updateFile, updateLayout }
+  const updateEvents = useCallback(
+    (nodeId: NodeId, events: readonly NodeEventBinding[]) => {
+      setDocument((curr) => updateNodeEventsInDocument(curr, activeCanvasId, nodeId, events))
+    },
+    [activeCanvasId, setDocument],
+  )
+  return { updateImage, updateFile, updateLayout, updateEvents }
 }
 
-/** 文档结构与字段编辑操作，新增节点后同步选中并退出编辑态 */
+/** 文档结构与字段编辑操作（自动作用于当前激活的主画布或支线画布，并同步同源节点） */
 export function useNodeMutations(options: Readonly<NodeMutationsOptions>): NodeMutations {
-  const treeActions = useNodeTreeActions(options)
+  const insertActions = useNodeInsertActions(options)
+  const deleteNode = useNodeDeleteAction(options)
   const textAndKindActions = useNodeTextAndKindActions(options)
   const assetAndLayoutActions = useNodeAssetAndLayoutActions(options)
-  return { ...treeActions, ...textAndKindActions, ...assetAndLayoutActions }
+  return { ...insertActions, deleteNode, ...textAndKindActions, ...assetAndLayoutActions }
 }

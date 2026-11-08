@@ -35,13 +35,24 @@ interface CanvasPanState {
   readonly shouldIgnoreClick: () => boolean
 }
 
+export interface ViewportFocusTarget {
+  readonly key: string
+  readonly x: number
+  readonly y: number
+  readonly stageWidth: number
+  readonly stageHeight: number
+}
+
 export interface CanvasViewportState extends CanvasPanState {
   readonly viewportRef: RefObject<HTMLDivElement | null>
+  readonly zoom: number
+  readonly resetView: () => void
   readonly worldStyle: CSSProperties
   readonly gridStyle: CSSProperties
 }
 
 const INITIAL_VIEW: CanvasView = { zoom: 1, x: 0, y: 0 }
+const BOTTOM_EDITOR_FOCUS_OFFSET_Y = -135
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
@@ -70,6 +81,18 @@ function zoomedViewAt(
   }
 }
 
+/** 将正在编辑的节点平移到下侧编辑器正上方居中位置，确保实时渲染清晰可见 */
+function focusedViewForTarget(current: CanvasView, target: ViewportFocusTarget): CanvasView {
+  const zoom = Math.max(current.zoom, 1)
+  const dx = target.x - target.stageWidth / 2
+  const dy = target.y - target.stageHeight / 2
+  return {
+    zoom,
+    x: -dx * zoom,
+    y: BOTTOM_EDITOR_FOCUS_OFFSET_Y - dy * zoom,
+  }
+}
+
 function useWheelZoom(
   viewportRef: RefObject<HTMLDivElement | null>,
   setView: Dispatch<SetStateAction<CanvasView>>,
@@ -78,6 +101,7 @@ function useWheelZoom(
     const element = viewportRef.current
     if (element === null) return undefined
     const handleWheel = (event: WheelEvent): void => {
+      if (event.target instanceof Element && event.target.closest('dialog') !== null) return
       event.preventDefault()
       const rect = element.getBoundingClientRect()
       const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_SPEED)
@@ -149,14 +173,27 @@ function useCanvasPan(
 }
 
 /** 画布视口：拖动空白处平移、滚轮以指针为中心缩放，网格随视口同步移动 */
-export function useCanvasViewport(): CanvasViewportState {
+export function useCanvasViewport(focusTarget?: ViewportFocusTarget | null): CanvasViewportState {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const [view, setView] = useState<CanvasView>(INITIAL_VIEW)
+  const [lastFocusKey, setLastFocusKey] = useState<string | null>(null)
+  const targetKey = focusTarget?.key ?? null
+  if (targetKey !== lastFocusKey) {
+    setLastFocusKey(targetKey)
+    if (focusTarget !== null && focusTarget !== undefined) {
+      setView((current) => focusedViewForTarget(current, focusTarget))
+    }
+  }
   useWheelZoom(viewportRef, setView)
   const pan = useCanvasPan(view, setView)
+  const resetView = useCallback(() => {
+    setView(INITIAL_VIEW)
+  }, [])
 
   return {
     viewportRef,
+    zoom: view.zoom,
+    resetView,
     worldStyle: {
       transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`,
       transformOrigin: 'center center',

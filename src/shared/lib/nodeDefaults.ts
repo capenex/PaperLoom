@@ -4,8 +4,8 @@ import type { DocumentDefaults, NodeLayout } from '@/shared/types/paper'
 export const DEFAULT_NODE_WIDTH = 208
 export const DEFAULT_NODE_HEIGHT = 112
 
-/** 多媒体（图片）节点点击放大时的缩放倍数（在原 2 倍基础上扩大 50%，即 3 倍） */
-export const EXPANDED_MEDIA_SCALE = 3
+/** 多媒体（图片）节点点击放大时的缩放倍数（1.5x） */
+export const EXPANDED_MEDIA_SCALE = 1.5
 
 /** 节点文字未显式设置字号时使用的默认字号 */
 export const DEFAULT_FONT_SIZE = 16

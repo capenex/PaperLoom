@@ -1,6 +1,8 @@
 import type {
+  CanvasId,
   DocumentDefaults,
   NodeContent,
+  NodeEventBinding,
   NodeId,
   NodeLayout,
   PaperNode,
@@ -13,6 +15,8 @@ interface EditorToolbarProps {
   readonly selectedNode: PaperNode | undefined
   readonly defaults: DocumentDefaults
   readonly rootCount: number
+  readonly activeCanvasId?: CanvasId | null
+  readonly activeHostNodeId?: NodeId | null
   readonly onAddRoot: () => void
   readonly onUpdateDefaults: (patch: Partial<DocumentDefaults>) => void
   readonly onAddChild: (nodeId: NodeId) => void
@@ -27,13 +31,18 @@ interface EditorToolbarProps {
     text: string,
   ) => void
   readonly onUpdateLayout: (nodeId: NodeId, patch: Partial<NodeLayout>) => void
+  readonly onUpdateNodeEvents: (nodeId: NodeId, events: readonly NodeEventBinding[]) => void
+  readonly onEnterSubCanvas: (nodeId: NodeId, canvasId: CanvasId) => void
+  readonly onEditNodeText: (nodeId: NodeId) => void
 }
 
-/** 编辑栏：选中节点时编辑该节点，未选中时进行文档级宏观操作 */
+/** 编辑栏：选中节点时编辑该节点（含事件绑定），未选中时进行文档级宏观操作 */
 export function EditorToolbar({
   selectedNode,
   defaults,
   rootCount,
+  activeCanvasId = null,
+  activeHostNodeId = null,
   onAddRoot,
   onUpdateDefaults,
   onAddChild,
@@ -43,6 +52,9 @@ export function EditorToolbar({
   onUpdateNodeImage,
   onUpdateNodeFile,
   onUpdateLayout,
+  onUpdateNodeEvents,
+  onEnterSubCanvas,
+  onEditNodeText,
 }: Readonly<EditorToolbarProps>) {
   if (selectedNode === undefined) {
     return (
@@ -59,6 +71,8 @@ export function EditorToolbar({
       node={selectedNode}
       defaults={defaults}
       rootCount={rootCount}
+      activeCanvasId={activeCanvasId}
+      isHostRoot={selectedNode.id === activeHostNodeId}
       onAddChild={onAddChild}
       onAddSibling={onAddSibling}
       onDelete={onDeleteNode}
@@ -66,6 +80,9 @@ export function EditorToolbar({
       onUpdateImage={onUpdateNodeImage}
       onUpdateFile={onUpdateNodeFile}
       onUpdateLayout={onUpdateLayout}
+      onUpdateEvents={onUpdateNodeEvents}
+      onEnterSubCanvas={onEnterSubCanvas}
+      onEditNodeText={onEditNodeText}
     />
   )
 }

@@ -34,8 +34,10 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
       <div className="min-w-0 flex-1">
         <EditorToolbar
           selectedNode={editor.selectedNode}
-          defaults={editor.document.defaults}
-          rootCount={editor.document.rootIds.length}
+          defaults={editor.activeDocument.defaults}
+          rootCount={editor.activeDocument.rootIds.length}
+          activeCanvasId={editor.activeCanvasId}
+          activeHostNodeId={editor.activeHostNodeId}
           onAddRoot={editor.addRoot}
           onUpdateDefaults={editor.updateDefaults}
           onAddChild={editor.addChild}
@@ -45,6 +47,9 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
           onUpdateNodeImage={editor.updateImage}
           onUpdateNodeFile={editor.updateFile}
           onUpdateLayout={editor.updateLayout}
+          onUpdateNodeEvents={editor.updateEvents}
+          onEnterSubCanvas={editor.enterSubCanvas}
+          onEditNodeText={editor.startEditing}
         />
       </div>
       <div className="w-36 shrink-0">
@@ -58,7 +63,10 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
   return (
     <main className="relative min-h-0 flex-1">
       <Editor
-        document={editor.document}
+        document={editor.activeDocument}
+        activeCanvasId={editor.activeCanvasId}
+        activeHostNodeId={editor.activeHostNodeId}
+        breadcrumbs={editor.breadcrumbs}
         selectedNodeId={editor.selectedNode?.id ?? null}
         editingNodeId={editor.editingNodeId}
         expandedMediaNodeId={editor.expandedMediaNodeId}
@@ -70,6 +78,9 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onUpdateContent={editor.updateContent}
         onUpdateTitle={editor.updateTitle}
         onAddImage={editor.addImage}
+        onTriggerEvent={editor.triggerNodeEvent}
+        onNavigateCanvas={editor.navigateToCanvas}
+        onPopSubCanvas={editor.popSubCanvas}
         onOpenMediaDetail={editor.openMediaDetail}
         onOpenReferenceDetail={editor.openReferenceDetail}
         onCollapseDetail={editor.collapseDetail}

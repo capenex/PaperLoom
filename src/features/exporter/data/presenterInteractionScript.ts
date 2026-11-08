@@ -109,12 +109,24 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   }
 
   function openDetail(node) {
-    if (!node.content || node.content.kind !== 'image' || typeof node.content.src !== 'string') return
-    detailImage.src = node.content.src
-    detailImage.alt = typeof node.content.alt === 'string' ? node.content.alt : ''
-    detailFrame.src = 'about:blank'
-    detail.setAttribute('data-mode', 'image')
-    detail.classList.add('is-open')
+    if (!node || !node.content) return
+    var c = node.content
+    if (c.kind === 'image' && typeof c.src === 'string') {
+      detailImage.src = c.src
+      detailImage.alt = typeof c.alt === 'string' ? c.alt : ''
+      detailFrame.src = 'about:blank'
+      detail.setAttribute('data-mode', 'image')
+      detail.classList.add('is-open')
+      return
+    }
+    if (c.kind === 'file') {
+      detailFrame.src = 'about:blank'
+      detailFileName.textContent = c.fileName || '未命名文件'
+      detailFileBadge.textContent = c.format === 'markdown' ? 'MD' : 'CODE'
+      detailFilePre.textContent = typeof c.text === 'string' ? c.text : ''
+      detail.setAttribute('data-mode', 'file')
+      detail.classList.add('is-open')
+    }
   }
 
   // 分界线拖动：横向范围 30%-70%
@@ -152,9 +164,89 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
     setDetailWidthPercent((detail.offsetWidth / window.innerWidth) * 100 + delta)
   })
 
+  // 原生 Web Animations API 辅助器：供支线画布过渡与后续动画事件统一调用，遵循系统减弱动态效果设置
+  var prefersReducedMotion =
+    Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+
+  function animateElement(el, keyframes, options) {
+    if (!el || typeof el.animate !== 'function' || prefersReducedMotion) return null
+    return el.animate(keyframes, options)
+  }
+
+  function switchCanvasSlice(targetCanvasId) {
+    var slice = targetCanvasId === null ? data.document : subCanvases[targetCanvasId]
+    if (!slice) return
+    activeCanvasId = targetCanvasId
+    selectedId = null
+    expandedId = null
+    closeDetail()
+    closeRefPop()
+    view = { zoom: 1, x: 0, y: 0 }
+    applyView()
+    computeSliceLayout(slice.nodes, slice.rootIds)
+    renderStage()
+    renderBreadcrumbs(navigateToCanvas, popSubCanvas)
+    animateElement(
+      stage,
+      [
+        { opacity: 0, transform: 'scale(0.97)' },
+        { opacity: 1, transform: 'scale(1)' },
+      ],
+      { duration: 180, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    )
+  }
+
+  function enterSubCanvas(canvasId) {
+    if (!canvasId || canvasId === activeCanvasId || !subCanvases[canvasId]) return
+    canvasStack = canvasStack.filter(function (id) { return id !== canvasId }).concat([canvasId])
+    switchCanvasSlice(canvasId)
+  }
+
+  function navigateToCanvas(targetCanvasId) {
+    if (targetCanvasId === activeCanvasId) return
+    if (targetCanvasId === null) {
+      canvasStack = []
+      switchCanvasSlice(null)
+      return
+    }
+    var idx = canvasStack.indexOf(targetCanvasId)
+    if (idx === -1) return
+    canvasStack = canvasStack.slice(0, idx + 1)
+    switchCanvasSlice(targetCanvasId)
+  }
+
+  function popSubCanvas() {
+    if (canvasStack.length === 0) return
+    canvasStack = canvasStack.slice(0, -1)
+    var nextId = canvasStack.length > 0 ? canvasStack[canvasStack.length - 1] : null
+    switchCanvasSlice(nextId)
+  }
+
+  // 可扩展事件与动画派发表：后续新增事件或动画只需在此表注册对应 type 的处理函数
+  var ACTION_HANDLERS = {
+    'open-detail': function (ctx) {
+      if (ctx.reference) openRefDetail(ctx.reference)
+      else if (ctx.node) openDetail(ctx.node)
+    },
+    'open-reference-preview': function (ctx) {
+      if (ctx.anchor) openRefPop(ctx.anchor, ctx.node)
+    },
+    'open-canvas': function (ctx, action) {
+      if (action && action.canvasId) enterSubCanvas(action.canvasId)
+    },
+  }
+  window.PAPERLOOM_ACTION_HANDLERS = ACTION_HANDLERS
+  window.PAPERLOOM_ANIMATE = animateElement
+
+  function dispatchEventAction(ctx, action) {
+    if (!action || !action.type || action.type === 'edit-node') return
+    var handler = ACTION_HANDLERS[action.type]
+    if (typeof handler === 'function') handler(ctx, action)
+  }
+
   function selectNode(nodeId) {
     var node = nodeId === null ? null : nodeById[nodeId]
-    var isImage = node && node.content && node.content.kind === 'image'
+    var isImage = node && isImageNode(node)
     selectedId = nodeId
     if (!isImage) {
       expandedId = null
@@ -167,45 +259,101 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   }
 
   function activateNode(node) {
-    if (expandedId === node.id) {
-      openDetail(node)
-      return
-    }
-    selectNode(node.id)
-  }
-
-  Object.keys(cardsById).forEach(function (id) {
-    var card = cardsById[id]
-    card.addEventListener('click', function (event) {
-      event.stopPropagation()
-      var anchor = refAnchorOf(event.target)
-      if (anchor) {
-        // 本地引用不跳转：单击只弹预览
-        event.preventDefault()
-        openRefPop(anchor)
+    if (!node) return
+    var card = cardsById[node.id] || null
+    var alreadyActive = selectedId === node.id || (isImageNode(node) && expandedId === node.id)
+    if (alreadyActive) {
+      var secondBinding = findTriggeredEvent(node, 'second-click', activeCanvasId, 'node')
+      if (secondBinding) {
+        dispatchEventAction({ node: node, card: card }, secondBinding.action)
         return
       }
+    }
+    selectNode(node.id)
+    var clickBinding = findTriggeredEvent(node, 'click', activeCanvasId, 'node')
+    if (clickBinding) {
+      dispatchEventAction({ node: node, card: card }, clickBinding.action)
+    }
+  }
+
+  function fireReferenceTrigger(node, anchor, trigger) {
+    var ref = refOf(anchor)
+    if (!ref) return
+    var binding = findTriggeredEvent(node, trigger, activeCanvasId, 'reference')
+    if (!binding) return
+    dispatchEventAction(
+      { node: node, card: cardsById[node.id] || null, anchor: anchor, reference: ref },
+      binding.action,
+    )
+  }
+
+  function firePopupTrigger(trigger) {
+    if (!popRef) return
+    if (!popSourceNode) {
+      if (trigger === 'click') openRefDetail(popRef)
+      return
+    }
+    var binding = findTriggeredEvent(popSourceNode, trigger, activeCanvasId, 'reference-popup')
+    if (!binding) return
+    if (binding.action.type !== 'open-reference-preview' && binding.action.type !== 'open-detail') {
       closeRefPop()
-      activateNode(nodeById[id])
-    })
-    card.addEventListener('dblclick', function (event) {
-      var anchor = refAnchorOf(event.target)
-      if (!anchor) return
-      event.stopPropagation()
-      event.preventDefault()
-      var ref = refOf(anchor)
-      if (ref) openRefDetail(ref)
-    })
-    card.addEventListener('contextmenu', function (event) {
-      event.stopPropagation()
-    })
-    card.addEventListener('keydown', function (event) {
-      if (event.key !== 'Enter' && event.key !== ' ') return
-      event.preventDefault()
-      event.stopPropagation()
-      activateNode(nodeById[id])
-    })
+    }
+    dispatchEventAction(
+      { node: popSourceNode, card: cardsById[popSourceNode.id] || null, reference: popRef },
+      binding.action,
+    )
+  }
+
+  popBody.addEventListener('click', function (event) {
+    event.stopPropagation()
+    firePopupTrigger('click')
   })
+  popBody.addEventListener('dblclick', function (event) {
+    event.stopPropagation()
+    firePopupTrigger('double-click')
+  })
+
+  bindCardInteractions = function () {
+    Object.keys(cardsById).forEach(function (id) {
+      var card = cardsById[id]
+      var node = nodeById[id]
+      card.addEventListener('click', function (event) {
+        event.stopPropagation()
+        var anchor = refAnchorOf(event.target)
+        if (anchor) {
+          event.preventDefault()
+          fireReferenceTrigger(node, anchor, 'click')
+          return
+        }
+        closeRefPop()
+        activateNode(node)
+      })
+      card.addEventListener('dblclick', function (event) {
+        event.stopPropagation()
+        var anchor = refAnchorOf(event.target)
+        if (anchor) {
+          event.preventDefault()
+          fireReferenceTrigger(node, anchor, 'double-click')
+          return
+        }
+        closeRefPop()
+        var dblBinding = findTriggeredEvent(node, 'double-click', activeCanvasId, 'node')
+        if (dblBinding) {
+          dispatchEventAction({ node: node, card: card }, dblBinding.action)
+        }
+      })
+      card.addEventListener('contextmenu', function (event) {
+        event.stopPropagation()
+      })
+      card.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        event.stopPropagation()
+        activateNode(node)
+      })
+    })
+  }
+  bindCardInteractions()
 
   detailCollapse.addEventListener('click', function (event) {
     event.stopPropagation()
@@ -228,6 +376,16 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
       closeRefPop()
       return
     }
-    selectNode(null)
+    if (detail.classList.contains('is-open')) {
+      closeDetail()
+      return
+    }
+    if (selectedId !== null || expandedId !== null) {
+      selectNode(null)
+      return
+    }
+    if (canvasStack.length > 0) {
+      popSubCanvas()
+    }
   })
 `

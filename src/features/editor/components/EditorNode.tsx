@@ -4,9 +4,12 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from 'cn'
 
 import { EXPANDED_MEDIA_SCALE, resolveNodeSize } from '@/shared/lib/nodeDefaults'
+import { findBoundSubCanvasId } from '@/shared/lib/nodeEvents'
 import type {
+  CanvasId,
   DocumentDefaults,
   ImageNodeContent,
+  NodeEventAction,
   NodeId,
   PaperNode,
   PaperReference,
@@ -15,7 +18,7 @@ import type {
 import type { Point } from '../data/layout'
 import { cardHandlers } from '../lib/cardInteraction'
 import { plainTextFromHtml } from '../lib/richText'
-import { FileNodeBody, TitleNodeBody } from './StaticNodeBodies'
+import { FileNodeBody, NodeBadge, TitleNodeBody } from './StaticNodeBodies'
 
 interface EditorNodeProps {
   readonly node: PaperNode
@@ -24,17 +27,19 @@ interface EditorNodeProps {
   readonly selected: boolean
   readonly editing: boolean
   readonly expanded: boolean
+  readonly activeCanvasId?: CanvasId | null | undefined
+  readonly isHostRoot?: boolean | undefined
   /** 这张卡片正被 Alt 拖动 */
   readonly dragging: boolean
   /** 舞台上是否有任何节点正处于 Alt 拖动中 */
-  readonly anyDragging?: boolean
+  readonly anyDragging?: boolean | undefined
   /** 这张卡片是当前合法的挂载落点 */
   readonly dropTarget: boolean
   /** 拖到空白处，提示松手后脱离为新根节点 */
   readonly detachHint: boolean
   readonly onSelect: (nodeId: NodeId) => void
   readonly onEdit: (nodeId: NodeId) => void
-  readonly onOpenMediaDetail: (nodeId: NodeId) => void
+  readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
   readonly onDragStart: (nodeId: NodeId, event: ReactPointerEvent<HTMLElement>) => void
@@ -62,7 +67,6 @@ function cardClassName(
   flushPadding: boolean,
   anyDragging: boolean,
 ): string {
-  // 非拖动状态下包含 left/top 过渡，使图片放大挤压周围节点时具备平滑推开动效
   return cn(
     'absolute flex cursor-pointer select-none flex-col overflow-hidden rounded-xl border',
     'shadow-[0_2px_10px_-2px_rgba(15,23,42,0.06),0_1px_3px_-1px_rgba(15,23,42,0.04)]',
@@ -72,7 +76,8 @@ function cardClassName(
     'hover:border-slate-300/90 hover:shadow-[0_10px_24px_-4px_rgba(15,23,42,0.1)] focus-visible:outline-none',
     'border-slate-200/90 bg-white text-slate-900',
     flushPadding ? 'p-0' : 'px-3.5 py-2.5',
-    selected && !editing && 'border-primary/40 ring-2 ring-primary ring-offset-2 ring-offset-[#fbfcfe]',
+    (selected || editing) &&
+      'border-primary/40 ring-2 ring-primary ring-offset-2 ring-offset-[#fbfcfe]',
     expanded && 'z-30 shadow-2xl',
   )
 }
@@ -85,7 +90,6 @@ function dragClassName(dragging: boolean, dropTarget: boolean, detachHint: boole
       detachHint && 'outline-2 outline-dashed outline-sky-500',
     )
   }
-
   return dropTarget ? 'ring-2 ring-emerald-500 ring-offset-2' : ''
 }
 
@@ -128,7 +132,7 @@ function ImageNodeBody({ content }: Readonly<ImageNodeBodyProps>) {
         alt={content.alt}
         draggable={false}
         referrerPolicy="no-referrer"
-        className="h-full w-full select-none object-cover"
+        className="h-full w-full object-cover select-none"
         onError={() => {
           setFailed(true)
         }}
@@ -147,7 +151,6 @@ function NodeBody({ node, fontSize }: Readonly<NodeBodyProps>) {
   if (node.content.kind === 'file') {
     return <FileNodeBody content={node.content} fontSize={fontSize} />
   }
-
   return <TextNodeBody content={node.content} fontSize={fontSize} />
 }
 
@@ -168,25 +171,29 @@ function nodeAccessibleLabel(node: PaperNode): string {
   return text.length > 40 ? `${text.slice(0, 40)}…` : text
 }
 
-function nodeAriaLabel(node: PaperNode): string {
+function nodeAriaLabel(node: PaperNode, hasSubCanvas: boolean): string {
   const label = nodeAccessibleLabel(node)
+  const suffix = hasSubCanvas ? '，双击展开支线画布' : ''
   if (node.content.kind === 'image') {
-    return `图片节点：${label}，点击放大，再次点击查看大图，右键空白处还原`
+    return `图片节点：${label}，点击放大，再次点击查看弹窗大图${suffix}`
   }
   if (node.content.kind === 'title') {
-    return `标题节点：${label}，双击编辑标题与副标题`
+    return `标题节点：${label}${suffix || '，双击编辑标题与副标题'}`
   }
   if (node.content.kind === 'file') {
-    return `静态文件节点：${label}，双击在右侧展开查看全文`
+    return `静态文件节点：${label}${suffix || '，双击在右侧展开查看全文'}`
   }
-  return `节点：${label}，双击编辑内容`
+  return `节点：${label}${suffix || '，双击编辑内容'}`
 }
 
 const ALT_DRAG_HINT = '按住 Alt 拖动：拖到节点上成为其子节点，拖到空白处脱离为新根节点'
 
-function nodeTitle(node: PaperNode): string {
+function nodeTitle(node: PaperNode, hasSubCanvas: boolean): string {
+  if (hasSubCanvas) {
+    return `双击展开支线画布（Alt+双击可原地编辑文字）；${ALT_DRAG_HINT}`
+  }
   if (node.content.kind === 'image') {
-    return `点击放大，再次点击查看大图，右键空白处还原；${ALT_DRAG_HINT}`
+    return `点击放大 1.5x，再次点击弹出大图，右键空白处还原；${ALT_DRAG_HINT}`
   }
   if (node.content.kind === 'file') {
     return `静态文件预览，双击在右侧展开查看全文；${ALT_DRAG_HINT}`
@@ -213,12 +220,16 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
   const isImage = node.content.kind === 'image'
   const flushPadding = isImage || node.content.kind === 'file'
   const imageExpanded = isImage && props.expanded
+  const activeCanvasId = props.activeCanvasId ?? null
+  const hasSubCanvas = findBoundSubCanvasId(node, activeCanvasId) !== null
   const handlers = cardHandlers({
     node,
+    selected,
     imageExpanded,
+    activeCanvasId,
     onSelect: props.onSelect,
     onEdit: props.onEdit,
-    onOpenMediaDetail: props.onOpenMediaDetail,
+    onTriggerEvent: props.onTriggerEvent,
     onOpenReferencePreview: props.onOpenReferencePreview,
     onOpenReferenceDetail: props.onOpenReferenceDetail,
     onDragStart: props.onDragStart,
@@ -230,16 +241,23 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={nodeAriaLabel(node)}
-      title={nodeTitle(node)}
+      aria-label={nodeAriaLabel(node, hasSubCanvas)}
+      title={nodeTitle(node, hasSubCanvas)}
       data-node-id={node.id}
       className={cn(
-        cardClassName(selected, editing, imageExpanded, flushPadding, Boolean(props.anyDragging)),
+        cardClassName(
+          selected,
+          editing,
+          imageExpanded,
+          flushPadding,
+          Boolean(props.anyDragging),
+        ),
         dragClassName(dragging, dropTarget, detachHint),
       )}
       style={nodeStyle(size.width, size.height, position, imageExpanded)}
       {...handlers}
     >
+      <NodeBadge hasSubCanvas={hasSubCanvas} isHostRoot={Boolean(props.isHostRoot)} />
       <NodeBody node={node} fontSize={defaults.fontSize} />
     </div>
   )

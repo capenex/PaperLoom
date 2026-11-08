@@ -6,6 +6,7 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
   var REF_PAGE_ATTR = 'data-pl-page'
   var REF_PREVIEW_ATTR = 'data-pl-preview'
   var popRef = null
+  var popSourceNode = null
 
   function refOf(anchor) {
     var kind = anchor.getAttribute(REF_KIND_ATTR)
@@ -28,14 +29,16 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
 
   function closeRefPop() {
     popRef = null
+    popSourceNode = null
     pop.classList.remove('is-open')
     popBody.textContent = ''
   }
 
-  function openRefPop(anchor) {
+  function openRefPop(anchor, sourceNode) {
     var ref = refOf(anchor)
     if (!ref) return
     popRef = ref
+    popSourceNode = sourceNode || null
     popTitle.textContent = ref.label
     popTag.textContent = ref.kind === 'pdf' ? 'PDF · 第 ' + ref.page + ' 页' : (ref.kind === 'page' ? '页面' : '图片')
     popBody.textContent = ''
@@ -78,9 +81,70 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
   }
 
   // PDF 用 pdf.js 逐页渲染：file:// 下既不能 fetch 本地 PDF，也不依赖浏览器内置阅读器
-  var PDF_VIEW_WIDTH = 1000
+  var PDF_VIEW_WIDTH = 1600
   var pdfDocs = {}
   var pdfView = { src: null, page: 1, count: 0 }
+  var pdfStage = { zoom: 1, x: 0, y: 0, drag: null }
+
+  function applyPdfTransform() {
+    detailPdfCanvas.style.transform =
+      'translate(' + pdfStage.x + 'px, ' + pdfStage.y + 'px) scale(' + pdfStage.zoom + ')'
+  }
+
+  function resetPdfTransform() {
+    pdfStage.zoom = 1
+    pdfStage.x = 0
+    pdfStage.y = 0
+    applyPdfTransform()
+  }
+
+  detailPdfScroll.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0) return
+    pdfStage.drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: pdfStage.x,
+      panY: pdfStage.y,
+    }
+    try {
+      detailPdfScroll.setPointerCapture(event.pointerId)
+    } catch (error) {
+      // 忽略指针捕获异常
+    }
+    detailPdfScroll.classList.add('is-panning')
+  })
+
+  detailPdfScroll.addEventListener('pointermove', function (event) {
+    if (!pdfStage.drag || pdfStage.drag.pointerId !== event.pointerId) return
+    pdfStage.x = pdfStage.drag.panX + (event.clientX - pdfStage.drag.startX)
+    pdfStage.y = pdfStage.drag.panY + (event.clientY - pdfStage.drag.startY)
+    applyPdfTransform()
+  })
+
+  function endPdfPan(event) {
+    if (!pdfStage.drag || pdfStage.drag.pointerId !== event.pointerId) return
+    if (detailPdfScroll.hasPointerCapture(event.pointerId)) {
+      detailPdfScroll.releasePointerCapture(event.pointerId)
+    }
+    pdfStage.drag = null
+    detailPdfScroll.classList.remove('is-panning')
+  }
+  detailPdfScroll.addEventListener('pointerup', endPdfPan)
+  detailPdfScroll.addEventListener('pointercancel', endPdfPan)
+
+  detailPdfScroll.addEventListener('wheel', function (event) {
+    event.preventDefault()
+    event.stopPropagation()
+    var rect = detailPdfScroll.getBoundingClientRect()
+    var factor = Math.exp(-event.deltaY * WHEEL_ZOOM_SPEED)
+    var zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pdfStage.zoom * factor))
+    var ratio = zoom / pdfStage.zoom
+    pdfStage.x = (event.clientX - rect.left - rect.width / 2) * (1 - ratio) + pdfStage.x * ratio
+    pdfStage.y = (event.clientY - rect.top - rect.height / 2) * (1 - ratio) + pdfStage.y * ratio
+    pdfStage.zoom = zoom
+    applyPdfTransform()
+  }, { passive: false })
 
   function base64ToBytes(encoded) {
     var binary = atob(encoded)
@@ -116,6 +180,7 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
   function openPdfView(src, page) {
     detail.setAttribute('data-mode', 'pdf')
     detail.classList.add('is-open')
+    resetPdfTransform()
     pdfView.src = src
     if (pdfDocs[src]) {
       pdfView.count = pdfDocs[src].numPages
@@ -172,9 +237,4 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
       openPdfView(ref.src, ref.page)
     }
   }
-
-  popBody.addEventListener('click', function (event) {
-    event.stopPropagation()
-    if (popRef) openRefDetail(popRef)
-  })
 `

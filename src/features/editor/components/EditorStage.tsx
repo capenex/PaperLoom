@@ -1,7 +1,9 @@
 import type { RefObject } from 'react'
 
 import type {
+  CanvasId,
   DocumentDefaults,
+  NodeEventAction,
   NodeId,
   PaperDocument,
   PaperNode,
@@ -19,6 +21,8 @@ interface EditorStageProps {
   readonly layout: DocumentLayout
   readonly drag: NodeDragControls
   readonly stageRef: RefObject<HTMLDivElement | null>
+  readonly activeCanvasId?: CanvasId | null | undefined
+  readonly activeHostNodeId?: NodeId | null | undefined
   readonly selectedNodeId: NodeId | null
   readonly editingNodeId: NodeId | null
   readonly expandedMediaNodeId: NodeId | null
@@ -27,7 +31,7 @@ interface EditorStageProps {
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
   readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onStopEditing: () => void
-  readonly onOpenMediaDetail: (nodeId: NodeId) => void
+  readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
 }
@@ -37,12 +41,14 @@ interface StageNodesProps {
   readonly defaults: DocumentDefaults
   readonly positions: ReadonlyMap<NodeId, Point>
   readonly drag: NodeDragControls
+  readonly activeCanvasId: CanvasId | null
+  readonly activeHostNodeId: NodeId | null
   readonly selectedNodeId: NodeId | null
   readonly editingNodeId: NodeId | null
   readonly expandedMediaNodeId: NodeId | null
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
-  readonly onOpenMediaDetail: (nodeId: NodeId) => void
+  readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
 }
@@ -90,20 +96,8 @@ function EditorEditLayer({
   )
 }
 
-function StageNodes({
-  nodes,
-  defaults,
-  positions,
-  drag,
-  selectedNodeId,
-  editingNodeId,
-  expandedMediaNodeId,
-  onSelectNode,
-  onStartEditing,
-  onOpenMediaDetail,
-  onOpenReferencePreview,
-  onOpenReferenceDetail,
-}: Readonly<StageNodesProps>) {
+function StageNodes(props: Readonly<StageNodesProps>) {
+  const { nodes, defaults, positions, drag } = props
   const anyDragging = drag.draggingNodeId !== null
   return (
     <>
@@ -117,18 +111,20 @@ function StageNodes({
             node={node}
             position={position}
             defaults={defaults}
-            selected={node.id === selectedNodeId}
-            editing={node.id === editingNodeId}
-            expanded={node.id === expandedMediaNodeId}
+            selected={node.id === props.selectedNodeId}
+            editing={node.id === props.editingNodeId}
+            expanded={node.id === props.expandedMediaNodeId}
+            activeCanvasId={props.activeCanvasId}
+            isHostRoot={node.id === props.activeHostNodeId}
             dragging={dragging}
             anyDragging={anyDragging}
             dropTarget={drag.dropTargetId === node.id}
             detachHint={dragging && drag.overBlank && node.parentId !== null}
-            onSelect={onSelectNode}
-            onEdit={onStartEditing}
-            onOpenMediaDetail={onOpenMediaDetail}
-            onOpenReferencePreview={onOpenReferencePreview}
-            onOpenReferenceDetail={onOpenReferenceDetail}
+            onSelect={props.onSelectNode}
+            onEdit={props.onStartEditing}
+            onTriggerEvent={props.onTriggerEvent}
+            onOpenReferencePreview={props.onOpenReferencePreview}
+            onOpenReferenceDetail={props.onOpenReferenceDetail}
             onDragStart={drag.startDrag}
             shouldSuppressClick={drag.shouldSuppressClick}
           />
@@ -174,18 +170,12 @@ export function EditorStage({ stageRef, ...rest }: Readonly<EditorStageProps>) {
         expandedMediaNodeId={rest.expandedMediaNodeId}
       />
       <StageNodes
+        {...rest}
         nodes={document.nodes}
         defaults={document.defaults}
         positions={viewLayout.positions}
-        drag={drag}
-        selectedNodeId={rest.selectedNodeId}
-        editingNodeId={rest.editingNodeId}
-        expandedMediaNodeId={rest.expandedMediaNodeId}
-        onSelectNode={rest.onSelectNode}
-        onStartEditing={rest.onStartEditing}
-        onOpenMediaDetail={rest.onOpenMediaDetail}
-        onOpenReferencePreview={rest.onOpenReferencePreview}
-        onOpenReferenceDetail={rest.onOpenReferenceDetail}
+        activeCanvasId={rest.activeCanvasId ?? null}
+        activeHostNodeId={rest.activeHostNodeId ?? null}
       />
       <EditorEditLayer
         nodes={document.nodes}

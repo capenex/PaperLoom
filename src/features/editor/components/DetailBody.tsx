@@ -46,5 +46,12 @@ export function DetailBody({ detail }: Readonly<DetailBodyProps>) {
       </div>
     )
   }
-  return <PdfDetailView key={`${detail.src}#${detail.page}`} src={detail.src} page={detail.page} />
+  return (
+    <PdfDetailView
+      key={`${detail.src}#${detail.page}`}
+      src={detail.src}
+      page={detail.page}
+      label={detail.label}
+    />
+  )
 }

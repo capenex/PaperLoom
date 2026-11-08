@@ -1,24 +1,13 @@
 import { createId } from '@/shared/lib/id'
 import { FALLBACK_DOCUMENT_DEFAULTS } from '@/shared/lib/nodeDefaults'
-import type {
-  DocumentDefaults,
-  ImageNodeContent,
-  NodeId,
-  NodeLayout,
-  PaperDocument,
-  PaperNode,
-} from '@/shared/types/paper'
+import { defaultEventsForKind } from '@/shared/lib/nodeEvents'
+import type { DocumentDefaults, ImageNodeContent, NodeId, NodeLayout, PaperDocument, PaperNode } from '@/shared/types/paper'
 import type { Point } from './layout'
 import { nextRootAnchor, stageBoundsShift } from './layout'
 import { SAMPLE_IMAGE } from './nodeContent'
 
-export {
-  changeNodeKind,
-  updateFileNodeContent,
-  updateImageNodeContent,
-  updateTextNodeContent,
-  updateTitleNodeContent,
-} from './nodeContent'
+export { changeNodeKind, updateFileNodeContent, updateImageNodeContent, updateTextNodeContent, updateTitleNodeContent } from './nodeContent'
+export { activeCanvasDocument, applyInCanvas, canDeleteNodeInCanvas, ensureSubCanvasForNode, propagateSharedNodeState, updateNodeEventsInDocument } from './subCanvas'
 
 export interface AddImageNodeTarget {
   readonly parentId?: NodeId | null
@@ -35,7 +24,7 @@ function createTextNode(id: NodeId, parentId: NodeId | null): PaperNode {
   }
 }
 
-/** 生成图片节点；尺寸留空，默认尺寸与文字节点一致 */
+/** 生成图片节点；尺寸留空，默认绑定「二次点击弹出图片详情弹窗」事件 */
 function createImageNode(
   id: NodeId,
   parentId: NodeId | null,
@@ -46,6 +35,7 @@ function createImageNode(
     id,
     parentId,
     content,
+    events: defaultEventsForKind('image'),
     layout: { x: anchor.x, y: anchor.y, collapsed: false },
   }
 }

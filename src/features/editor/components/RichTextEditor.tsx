@@ -15,9 +15,9 @@ import { extractImageFiles } from '../lib/inboxUpload'
 import { emitHtml, insertPlainText } from '../lib/richText'
 import { RichTextToolbar } from './RichTextToolbar'
 
-/** 编辑窗输入框样式：与白底节点卡片保持一致 */
+/** 底部弹出编辑器输入框样式：宽敞留白，节点本身在画布正上方实时渲染 */
 const RICH_TEXT_INPUT_CLASS =
-  'rich-text-editor h-full w-full overflow-y-auto rounded-xl border-2 border-primary bg-white px-3.5 py-2.5 leading-relaxed text-slate-600 shadow-lg outline-none'
+  'rich-text-editor min-h-0 flex-1 w-full overflow-y-auto bg-white px-5 py-4 leading-relaxed text-slate-700 outline-none'
 
 interface RichTextEditorProps {
   readonly value: string
@@ -196,27 +196,30 @@ function RichTextInput({
 
 function FloatingFormatToolbar({ commands, onDone }: Readonly<FloatingFormatToolbarProps>) {
   return (
-    <div className="absolute -top-11 left-0 z-30 flex w-max items-center gap-0.5 rounded-xl border border-slate-200/90 bg-white/95 p-1 shadow-[0_12px_28px_-6px_rgba(15,23,42,0.14)] backdrop-blur-md">
-      <RichTextToolbar
-        onCommand={commands.runCommand}
-        onFontSize={commands.changeFontSize}
-        onLink={commands.createLink}
-        onReference={commands.createReference}
-      />
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/90 px-4 py-1.5">
+      <div className="flex flex-wrap items-center gap-0.5">
+        <RichTextToolbar
+          onCommand={commands.runCommand}
+          onFontSize={commands.changeFontSize}
+          onLink={commands.createLink}
+          onReference={commands.createReference}
+        />
+      </div>
 
-      <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
-
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="text-primary hover:bg-primary/10 hover:text-primary"
-        aria-label="完成编辑"
-        title="完成编辑（Esc）"
-        onClick={onDone}
-      >
-        <Check aria-hidden="true" />
-      </Button>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-slate-400">上方节点实时渲染 · Esc 完成</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-primary hover:bg-primary/10 hover:text-primary"
+          aria-label="完成编辑"
+          title="完成编辑（Esc）"
+          onClick={onDone}
+        >
+          <Check aria-hidden="true" />
+        </Button>
+      </div>
     </div>
   )
 }
@@ -238,7 +241,7 @@ export function RichTextEditor({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="flex h-full w-full flex-col">
       <FloatingFormatToolbar commands={commands} onDone={finishEditing} />
       <RichTextInput
         editorRef={editorRef}
