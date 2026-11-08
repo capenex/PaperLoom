@@ -56,6 +56,11 @@ project.json.tmp
 *.mpeg
 *.3gp
 
+# AI Studio 导出专属文件
+.aistudio/
+metadata.json
+bun.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
