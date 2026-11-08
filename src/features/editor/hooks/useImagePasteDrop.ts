@@ -97,6 +97,13 @@ function handleCanvasImageDrop(
 function useWindowImagePaste(latestRef: RefObject<Readonly<ImagePasteDropOptions>>): void {
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent): void => {
+      if (event.defaultPrevented) return
+      const isEditingText =
+        event.target instanceof Element &&
+        event.target.closest('input, textarea, [contenteditable="true"]') !== null
+      if (isEditingText && (event.clipboardData?.getData('text/plain') ?? '') !== '') {
+        return
+      }
       // 粘贴只认一张图：截图与多格式剪贴板会把同一张图拆成多个文件项
       const file = extractPastedImageFile(event.clipboardData)
       if (file === null) return

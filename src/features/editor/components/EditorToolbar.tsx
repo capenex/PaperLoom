@@ -23,6 +23,7 @@ interface EditorToolbarProps {
   readonly onAddSibling: (nodeId: NodeId) => void
   readonly onDeleteNode: (nodeId: NodeId) => void
   readonly onChangeNodeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
+  readonly onUpdateNodeTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onUpdateNodeImage: (nodeId: NodeId, src: string, alt: string) => void
   readonly onUpdateNodeFile: (
     nodeId: NodeId,
@@ -36,7 +37,7 @@ interface EditorToolbarProps {
   readonly onEditNodeText: (nodeId: NodeId) => void
 }
 
-/** 编辑栏：选中节点时编辑该节点（含事件绑定），未选中时进行文档级宏观操作 */
+/** 编辑栏：选中节点时编辑该节点（含标题文字与事件绑定），未选中时进行文档级宏观操作 */
 export function EditorToolbar({
   selectedNode,
   defaults,
@@ -49,6 +50,7 @@ export function EditorToolbar({
   onAddSibling,
   onDeleteNode,
   onChangeNodeKind,
+  onUpdateNodeTitle,
   onUpdateNodeImage,
   onUpdateNodeFile,
   onUpdateLayout,
@@ -77,6 +79,7 @@ export function EditorToolbar({
       onAddSibling={onAddSibling}
       onDelete={onDeleteNode}
       onChangeKind={onChangeNodeKind}
+      onUpdateTitle={onUpdateNodeTitle}
       onUpdateImage={onUpdateNodeImage}
       onUpdateFile={onUpdateNodeFile}
       onUpdateLayout={onUpdateLayout}

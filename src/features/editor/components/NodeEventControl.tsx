@@ -4,8 +4,10 @@ import { cn } from 'cn'
 
 import { createId } from '@/shared/lib/id'
 import {
+  DEFAULT_HOST_EXIT_EVENT,
   defaultEventsForNode,
   findTriggeredEvent,
+  isActionActiveInCanvas,
   resolveBindingTarget,
   resolveNodeEvents,
 } from '@/shared/lib/nodeEvents'
@@ -15,19 +17,35 @@ import { NodeEventPopover } from './NodeEventPopover'
 interface NodeEventControlProps {
   readonly node: PaperNode
   readonly activeCanvasId: CanvasId | null
+  readonly isHostRoot?: boolean | undefined
   readonly onUpdateEvents: (events: readonly NodeEventBinding[]) => void
   readonly onEnterSubCanvas: (canvasId: CanvasId) => void
   readonly onEditNodeText: () => void
 }
 
+function isCurrentCanvasEntryBinding(
+  binding: NodeEventBinding,
+  activeCanvasId: CanvasId | null,
+): boolean {
+  return (
+    activeCanvasId !== null &&
+    binding.action.type === 'open-canvas' &&
+    binding.action.canvasId === activeCanvasId
+  )
+}
+
 function bindOrEnterBranchCanvas(
   events: readonly NodeEventBinding[],
+  activeCanvasId: CanvasId | null,
   onUpdateEvents: (events: readonly NodeEventBinding[]) => void,
   onEnterSubCanvas: (canvasId: CanvasId) => void,
   closePopover: () => void,
 ): void {
   const existing = events.find(
-    (item) => resolveBindingTarget(item) === 'node' && item.action.type === 'open-canvas',
+    (item) =>
+      resolveBindingTarget(item) === 'node' &&
+      item.action.type === 'open-canvas' &&
+      item.action.canvasId !== activeCanvasId,
   )
   if (existing !== undefined && existing.action.type === 'open-canvas') {
     onEnterSubCanvas(existing.action.canvasId)
@@ -42,10 +60,50 @@ function bindOrEnterBranchCanvas(
   }
   onUpdateEvents([
     ...events.filter(
-      (item) => !(resolveBindingTarget(item) === 'node' && item.trigger === 'double-click'),
+      (item) =>
+        !(
+          resolveBindingTarget(item) === 'node' &&
+          item.trigger === 'double-click' &&
+          isActionActiveInCanvas(item.action, activeCanvasId)
+        ),
     ),
     nextBinding,
   ])
+}
+
+/** 计算当前画布内展示给用户的生效事件列表（子画布内隐藏上级入口绑定，默认展示「双击返回上级画布」） */
+function effectiveEventsInCanvas(
+  node: PaperNode,
+  activeCanvasId: CanvasId | null,
+  isHostRoot: boolean,
+): readonly NodeEventBinding[] {
+  const base = resolveNodeEvents(node).filter(
+    (item) => !isCurrentCanvasEntryBinding(item, activeCanvasId),
+  )
+  if (!isHostRoot || activeCanvasId === null) return base
+  const hasActiveDblClick = base.some(
+    (item) =>
+      resolveBindingTarget(item) === 'node' &&
+      item.trigger === 'double-click' &&
+      isActionActiveInCanvas(item.action, activeCanvasId) &&
+      (item.action.type === 'open-canvas' || item.action.type === 'return-parent-canvas'),
+  )
+  return hasActiveDblClick ? base : [...base, DEFAULT_HOST_EXIT_EVENT]
+}
+
+/** 在子画布内修改同源起点节点事件时，自动保留上级画布指向本子画布的入口绑定 */
+function mergeSavedEventsFromCanvas(
+  rawEvents: readonly NodeEventBinding[],
+  nextVisibleEvents: readonly NodeEventBinding[],
+  activeCanvasId: CanvasId | null,
+): readonly NodeEventBinding[] {
+  const parentEntryBindings = rawEvents.filter((item) =>
+    isCurrentCanvasEntryBinding(item, activeCanvasId),
+  )
+  const cleanedVisible = nextVisibleEvents.filter(
+    (item) => item.id !== DEFAULT_HOST_EXIT_EVENT.id,
+  )
+  return [...parentEntryBindings, ...cleanedVisible]
 }
 
 function EventToggleButtons({
@@ -84,7 +142,7 @@ function EventToggleButtons({
         <button
           type="button"
           onClick={onEditNodeText}
-          title="双击已被事件占用，点击此处（或按住 Alt 双击节点）编辑文字内容"
+          title="双击已被事件占用，点击此处（或按住 Alt 双击节点）编辑富文本内容"
           className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-lg border border-slate-200/90 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
         >
           <Pencil className="size-3.5 text-slate-500" aria-hidden="true" />
@@ -95,15 +153,22 @@ function EventToggleButtons({
   )
 }
 
-/** 节点事件绑定工具栏入口：展示当前绑定事件数、提供快捷文字编辑按钮与事件编辑浮窗 */
+/** 节点事件绑定工具栏入口：展示当前绑定事件数、提供富文本快捷编辑按钮与事件编辑浮窗 */
 export function NodeEventControl(props: Readonly<NodeEventControlProps>) {
   const { node, activeCanvasId, onUpdateEvents, onEnterSubCanvas, onEditNodeText } = props
+  const isHostRoot = Boolean(props.isHostRoot)
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const events = resolveNodeEvents(node)
-  const isTextEditable = node.content.kind === 'text' || node.content.kind === 'title'
-  const dblClickEvent = findTriggeredEvent(node, 'double-click', activeCanvasId, 'node')
+  const rawEvents = resolveNodeEvents(node)
+  const events = effectiveEventsInCanvas(node, activeCanvasId, isHostRoot)
+  const isRichTextNode = node.content.kind === 'text'
+  const hostNodeId = isHostRoot ? node.id : null
+  const dblClickEvent = findTriggeredEvent(node, 'double-click', activeCanvasId, 'node', hostNodeId)
   const dblClickOccupied = dblClickEvent?.action.type !== 'edit-node'
+
+  const handleUpdateEvents = (nextVisible: readonly NodeEventBinding[]): void => {
+    onUpdateEvents(mergeSavedEventsFromCanvas(rawEvents, nextVisible, activeCanvasId))
+  }
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent): void => {
@@ -112,15 +177,19 @@ export function NodeEventControl(props: Readonly<NodeEventControlProps>) {
       setOpen(false)
     }
     document.addEventListener('pointerdown', onPointerDown)
-    return () => { document.removeEventListener('pointerdown', onPointerDown) }
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
   }, [open])
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-1.5">
       <EventToggleButtons
         eventCount={events.length}
-        showEditButton={isTextEditable && dblClickOccupied}
-        onToggleOpen={() => { setOpen((prev) => !prev) }}
+        showEditButton={isRichTextNode && dblClickOccupied}
+        onToggleOpen={() => {
+          setOpen((prev) => !prev)
+        }}
         onEditNodeText={onEditNodeText}
       />
       {open && (
@@ -128,10 +197,21 @@ export function NodeEventControl(props: Readonly<NodeEventControlProps>) {
           kind={node.content.kind}
           events={events}
           defaultEvents={defaultEventsForNode(node)}
-          onUpdateEvents={onUpdateEvents}
-          onEnterCanvas={(id) => { onEnterSubCanvas(id); setOpen(false) }}
+          onUpdateEvents={handleUpdateEvents}
+          onEnterCanvas={(id) => {
+            onEnterSubCanvas(id)
+            setOpen(false)
+          }}
           onBindBranchCanvas={() => {
-            bindOrEnterBranchCanvas(events, onUpdateEvents, onEnterSubCanvas, () => { setOpen(false) })
+            bindOrEnterBranchCanvas(
+              rawEvents,
+              activeCanvasId,
+              onUpdateEvents,
+              onEnterSubCanvas,
+              () => {
+                setOpen(false)
+              },
+            )
           }}
         />
       )}

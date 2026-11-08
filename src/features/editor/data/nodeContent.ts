@@ -27,7 +27,7 @@ export const SAMPLE_IMAGE: ImageNodeContent = {
 const SAMPLE_TITLE: TitleNodeContent = {
   kind: 'title',
   title: '核心主题',
-  subtitle: '双击编辑主标题与副标题',
+  subtitle: '在顶部栏修改标题与绑定事件',
 }
 
 const SAMPLE_FILE: FileNodeContent = {

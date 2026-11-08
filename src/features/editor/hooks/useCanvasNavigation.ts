@@ -134,6 +134,7 @@ export function useCanvasNavigation(options: Readonly<CanvasNavigationOptions>) 
       if (action.type === 'edit-node') startEditing(nodeId)
       else if (action.type === 'open-detail') openMediaDetail(nodeId)
       else if (action.type === 'open-canvas') stackActions.enterSubCanvas(nodeId, action.canvasId)
+      else if (action.type === 'return-parent-canvas') stackActions.popSubCanvas()
     },
     [openMediaDetail, stackActions, startEditing],
   )

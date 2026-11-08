@@ -13,7 +13,7 @@ interface FileNodeBodyProps {
   readonly fontSize: number
 }
 
-/** 节点右上角标识角标：提示已绑定支线画布，或当前为支线画布内的同源起点节点 */
+/** 节点右上角标识角标：提示已绑定支线画布，或当前为支线画布内的同源起点（默认双击返回上级画布） */
 export function NodeBadge({
   hasSubCanvas,
   isHostRoot,
@@ -32,7 +32,7 @@ export function NodeBadge({
   if (isHostRoot) {
     return (
       <span
-        aria-label="与上级画布实时同步的同源起点节点"
+        aria-label="与上级画布实时同步的同源起点节点，双击返回上级画布"
         className="pointer-events-none absolute top-1.5 right-1.5 z-10 inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50/95 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 shadow-2xs backdrop-blur-xs"
       >
         <Link2 className="size-2.5" aria-hidden="true" />
@@ -43,7 +43,7 @@ export function NodeBadge({
   return null
 }
 
-/** 纯标题节点正文：以默认样式居中展示主标题与可选副标题 */
+/** 纯标题节点正文：以默认样式居中展示主标题与可选副标题（在顶部工具栏中直接输入） */
 export function TitleNodeBody({ content, fontSize }: Readonly<TitleNodeBodyProps>) {
   const title = content.title.trim()
   const subtitle = content.subtitle.trim()
@@ -52,7 +52,7 @@ export function TitleNodeBody({ content, fontSize }: Readonly<TitleNodeBodyProps
     return (
       <div className="flex h-full flex-col items-center justify-center gap-1">
         <span className="text-xs font-medium text-slate-400">空白标题</span>
-        <span className="text-[11px] text-slate-300">双击编辑主标题与副标题</span>
+        <span className="text-[11px] text-slate-300">选中后在顶部栏输入主副标题</span>
       </div>
     )
   }

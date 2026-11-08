@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { findBoundSubCanvasId, findTriggeredEvent, resolveNodeEvents } from '@/shared/lib/nodeEvents'
 import { createProjectFile, parseProjectFile, serializeProjectFile } from '@/shared/lib/projectFile'
+import { estimateFittedNodeSize } from '../lib/fitNodeSize'
 import {
   activeCanvasDocument,
   applyInCanvas,
@@ -35,13 +36,19 @@ void test('default events are bound to text, title, image and file nodes and res
   assert.equal(imageEvents[0]?.action.type, 'open-detail')
   assert.equal(findTriggeredEvent(imageNode, 'second-click')?.action.type, 'open-detail')
 
+  doc = changeNodeKind(doc, rootId, 'title')
+  const titleNode = doc.nodes.find((n) => n.id === rootId)
+  assert.ok(titleNode !== undefined)
+  assert.equal(resolveNodeEvents(titleNode).length, 0)
+  assert.equal(findTriggeredEvent(titleNode, 'double-click'), undefined)
+
   doc = changeNodeKind(doc, rootId, 'file')
   const fileNode = doc.nodes.find((n) => n.id === rootId)
   assert.ok(fileNode !== undefined)
   assert.equal(findTriggeredEvent(fileNode, 'double-click')?.action.type, 'open-detail')
 })
 
-void test('binding open-canvas creates subCanvas with protected shared host node', () => {
+void test('binding open-canvas creates subCanvas with protected shared host node and default double-click return exit', () => {
   let doc = createInitialDocument()
   const rootId = doc.rootIds[0]
   assert.ok(rootId !== undefined)
@@ -66,6 +73,16 @@ void test('binding open-canvas creates subCanvas with protected shared host node
   const hostInSub = subSlice.nodes.find((n) => n.id === rootId)
   assert.ok(hostInSub !== undefined)
   assert.equal(canDeleteNodeInCanvas(doc, 'branch-canvas-1', hostInSub), false)
+
+  // 在子画布内双击同源起点（入口）节点，默认触发 return-parent-canvas 回到上级画布
+  const exitBinding = findTriggeredEvent(
+    hostInSub,
+    'double-click',
+    'branch-canvas-1',
+    'node',
+    rootId,
+  )
+  assert.equal(exitBinding?.action.type, 'return-parent-canvas')
 })
 
 void test('shared host node syncs content bidirectionally and serializes cleanly', () => {
@@ -129,4 +146,39 @@ void test('text nodes with embedded PDF references resolve reference and popup t
     findTriggeredEvent(refNode, 'click', null, 'reference-popup')?.action.type,
     'open-detail',
   )
+})
+
+void test('estimateFittedNodeSize computes compact sizes for short title and expanded sizes for long rich text', () => {
+  let doc = createInitialDocument()
+  const rootId = doc.rootIds[0]
+  assert.ok(rootId !== undefined)
+
+  doc = updateTextNodeContent(doc, rootId, '<p>短句</p>')
+  const shortTextNode = doc.nodes.find((n) => n.id === rootId)
+  assert.ok(shortTextNode !== undefined)
+  const shortFitted = estimateFittedNodeSize(shortTextNode, doc.defaults)
+  assert.ok(shortFitted !== null)
+  assert.equal(shortFitted.width, 120)
+  assert.equal(shortFitted.height, 64)
+
+  doc = updateTextNodeContent(
+    doc,
+    rootId,
+    '<h1>系统架构详述</h1><p>这是一段较长的富文本说明内容，用于验证 Ctrl+鼠标左键能够将卡片自动缩放到容纳多行段落的合适宽高，避免内容被截断。</p><p>第二段补充说明文字。</p>',
+  )
+  const longTextNode = doc.nodes.find((n) => n.id === rootId)
+  assert.ok(longTextNode !== undefined)
+  const longFitted = estimateFittedNodeSize(longTextNode, doc.defaults)
+  assert.ok(longFitted !== null)
+  assert.ok(longFitted.width > shortFitted.width)
+  assert.ok(longFitted.height > shortFitted.height)
+
+  doc = changeNodeKind(doc, rootId, 'title')
+  doc = updateTitleNodeContent(doc, rootId, '章节一', '')
+  const titleNode = doc.nodes.find((n) => n.id === rootId)
+  assert.ok(titleNode !== undefined)
+  const titleFitted = estimateFittedNodeSize(titleNode, doc.defaults)
+  assert.ok(titleFitted !== null)
+  assert.ok(titleFitted.width >= 120 && titleFitted.width <= 200)
+  assert.ok(titleFitted.height >= 64 && titleFitted.height <= 96)
 })

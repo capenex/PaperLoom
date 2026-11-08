@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 
+import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import type {
   CanvasId,
   DocumentDefaults,
@@ -29,7 +30,7 @@ interface EditorStageProps {
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
-  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
+  readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onStopEditing: () => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
@@ -48,6 +49,7 @@ interface StageNodesProps {
   readonly expandedMediaNodeId: NodeId | null
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
+  readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
@@ -57,9 +59,7 @@ interface EditorEditLayerProps {
   readonly nodes: readonly PaperNode[]
   readonly defaults: DocumentDefaults
   readonly editingNodeId: NodeId | null
-  readonly positions: ReadonlyMap<NodeId, Point>
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
-  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onClose: () => void
 }
 
@@ -67,29 +67,19 @@ function EditorEditLayer({
   nodes,
   defaults,
   editingNodeId,
-  positions,
   onUpdateContent,
-  onUpdateTitle,
   onClose,
 }: Readonly<EditorEditLayerProps>) {
   const node = nodes.find((item) => item.id === editingNodeId)
-  if (node === undefined) return null
-  if (node.content.kind !== 'text' && node.content.kind !== 'title') return null
-  const position = positions.get(node.id)
-  if (position === undefined) return null
+  if (node === undefined || node.content.kind !== 'text') return null
 
   return (
     <NodeEditWindow
       key={node.id}
       content={node.content}
-      layout={node.layout}
-      position={position}
       defaults={defaults}
       onChangeText={(html) => {
         onUpdateContent(node.id, html)
-      }}
-      onChangeTitle={(title, subtitle) => {
-        onUpdateTitle(node.id, title, subtitle)
       }}
       onClose={onClose}
     />
@@ -115,6 +105,7 @@ function StageNodes(props: Readonly<StageNodesProps>) {
             editing={node.id === props.editingNodeId}
             expanded={node.id === props.expandedMediaNodeId}
             activeCanvasId={props.activeCanvasId}
+            activeHostNodeId={props.activeHostNodeId}
             isHostRoot={node.id === props.activeHostNodeId}
             dragging={dragging}
             anyDragging={anyDragging}
@@ -122,6 +113,7 @@ function StageNodes(props: Readonly<StageNodesProps>) {
             detachHint={dragging && drag.overBlank && node.parentId !== null}
             onSelect={props.onSelectNode}
             onEdit={props.onStartEditing}
+            onFitNodeSize={props.onFitNodeSize}
             onTriggerEvent={props.onTriggerEvent}
             onOpenReferencePreview={props.onOpenReferencePreview}
             onOpenReferenceDetail={props.onOpenReferenceDetail}
@@ -181,9 +173,7 @@ export function EditorStage({ stageRef, ...rest }: Readonly<EditorStageProps>) {
         nodes={document.nodes}
         defaults={document.defaults}
         editingNodeId={rest.editingNodeId}
-        positions={viewLayout.positions}
         onUpdateContent={rest.onUpdateContent}
-        onUpdateTitle={rest.onUpdateTitle}
         onClose={rest.onStopEditing}
       />
     </div>

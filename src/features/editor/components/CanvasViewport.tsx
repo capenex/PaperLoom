@@ -48,7 +48,10 @@ export function CanvasViewport({
         if (shouldIgnoreClick() || shouldIgnoreBackgroundClick()) return
         onBackgroundClick()
       }}
-      onContextMenu={onBackgroundContextMenu}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onBackgroundContextMenu()
+      }}
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
         onBackgroundClick()

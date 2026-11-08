@@ -20,7 +20,7 @@ function findNodeKind(
   return nodes.find((item) => item.id === nodeId)?.content.kind ?? null
 }
 
-/** 图片与静态文件节点的放大及右侧详情状态；选中其他节点会还原状态 */
+/** 图片与静态文件节点的右侧详情状态；单击选中图片节点不再放大画布卡片，默认事件仅弹出右栏大图 */
 export function useMediaExpansion(nodes: readonly PaperNode[]): MediaExpansionState {
   const [expandedMediaNodeId, setExpandedMediaNodeId] = useState<NodeId | null>(null)
   const [detailMediaNodeId, setDetailMediaNodeId] = useState<NodeId | null>(null)
@@ -28,7 +28,7 @@ export function useMediaExpansion(nodes: readonly PaperNode[]): MediaExpansionSt
   const expandMediaNode = useCallback(
     (nodeId: NodeId) => {
       const kind = findNodeKind(nodes, nodeId)
-      setExpandedMediaNodeId(kind === 'image' ? nodeId : null)
+      setExpandedMediaNodeId(null)
       setDetailMediaNodeId((current) =>
         (kind === 'image' || kind === 'file') && current === nodeId ? current : null,
       )
@@ -40,7 +40,7 @@ export function useMediaExpansion(nodes: readonly PaperNode[]): MediaExpansionSt
     (nodeId: NodeId) => {
       const kind = findNodeKind(nodes, nodeId)
       if (kind !== 'image' && kind !== 'file') return
-      setExpandedMediaNodeId(kind === 'image' ? nodeId : null)
+      setExpandedMediaNodeId(null)
       setDetailMediaNodeId(nodeId)
     },
     [nodes],

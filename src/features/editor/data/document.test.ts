@@ -192,12 +192,19 @@ void test('live Markdown shortcuts and inline math formula rendering work', () =
   assert.ok(mathMatch.replacementHtml.includes('class="pl-math"'))
   assert.ok(mathMatch.replacementHtml.includes('E = mc<sup>2</sup>'))
 
-  const fractionHtml = renderInlineMathHtml('\\alpha + \\frac{1}{n_i} \\le \\sqrt{x}')
+  const fractionHtml = renderInlineMathHtml('\\alpha + \\frac{x_{i+1}}{y^{2n}} \\le \\sqrt{a_\\beta^2}')
   assert.ok(fractionHtml.includes('α'))
   assert.ok(fractionHtml.includes('pl-frac-num'))
-  assert.ok(fractionHtml.includes('<sub>i</sub>'))
+  assert.ok(fractionHtml.includes('<sub>i+1</sub>'))
+  assert.ok(fractionHtml.includes('<sup>2n</sup>'))
+  assert.ok(fractionHtml.includes('<sub>β</sub>'))
   assert.ok(fractionHtml.includes('≤'))
   assert.ok(fractionHtml.includes('pl-sqrt-body'))
+
+  const multiInline = matchAnyInlineMarkdown('前文 `code` 后接 **bold** 与 *italic*')
+  assert.equal(multiInline?.replacementHtml, '<code>code</code>')
+  const italicMatch = matchAnyInlineMarkdown('测试 *斜体文字* 结束')
+  assert.equal(italicMatch?.replacementHtml, '<em>斜体文字</em>')
 })
 
 void test('inbox image timestamp naming and addImageNode create multimedia nodes in res/inbox/', () => {
@@ -279,3 +286,37 @@ void test('displaceLayoutForExpandedMedia scales to 1.5x and pushes surrounding 
   assert.ok(baseBottom && expBottom && expBottom.y !== baseBottom.y)
   assert.ok(baseTop && expTop && expTop.y !== baseTop.y)
 })
+
+void test('layoutDocument pushes wide child nodes and neighboring subtrees outward so connections stay visible', () => {
+  let doc = createInitialDocument()
+  const rootId = doc.rootIds[0]
+  assert.ok(rootId !== undefined)
+
+  doc = updateNodeLayout(doc, rootId, { width: 179, height: 100 })
+  const child1Id = doc.nodes[1]?.id
+  assert.ok(child1Id !== undefined)
+  doc = updateNodeLayout(doc, child1Id, { width: 460, height: 144 })
+  doc = addSiblingNode(doc, child1Id, 'wide-child-2')
+  doc = updateNodeLayout(doc, 'wide-child-2', { width: 541, height: 144 })
+
+  const layout = layoutDocument(doc.nodes, doc.rootIds, doc.defaults)
+  const rootPos = layout.positions.get(rootId)
+  const child1Pos = layout.positions.get(child1Id)
+  const child2Pos = layout.positions.get('wide-child-2')
+  assert.ok(rootPos && child1Pos && child2Pos)
+
+  const parentRightEdge = rootPos.x + 179 / 2
+  const child1LeftEdge = child1Pos.x - 460 / 2
+  const child2LeftEdge = child2Pos.x - 541 / 2
+  assert.ok(child1LeftEdge - parentRightEdge >= 95.5)
+  assert.ok(child2LeftEdge - parentRightEdge >= 95.5)
+
+  doc = addRootNode(doc, 'second-root')
+  doc = updateNodeLayout(doc, 'second-root', { x: rootPos.x, y: rootPos.y + 40, width: 208, height: 144 })
+  const multiLayout = layoutDocument(doc.nodes, doc.rootIds, doc.defaults)
+  const secondRootPos = multiLayout.positions.get('second-root')
+  const updatedChild2Pos = multiLayout.positions.get('wide-child-2')
+  assert.ok(secondRootPos && updatedChild2Pos)
+  assert.ok(secondRootPos.y - 144 / 2 >= updatedChild2Pos.y + 144 / 2 + 48 - 1)
+})
+

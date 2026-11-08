@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import type { RefObject } from 'react'
 
 import type { PaperReference } from '@/shared/types/paper'
@@ -26,8 +26,18 @@ export function useRichTextCommands(
   onChange: (html: string) => void,
 ): RichTextCommands {
   const rememberSelection = useCallback(() => {
-    selectionRef.current = captureSelection(editorRef.current)
+    const captured = captureSelection(editorRef.current)
+    if (captured !== null) {
+      selectionRef.current = captured
+    }
   }, [editorRef, selectionRef])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', rememberSelection)
+    return () => {
+      document.removeEventListener('selectionchange', rememberSelection)
+    }
+  }, [rememberSelection])
   const { createLink, createReference } = useLinkCommands(
     editorRef,
     selectionRef,
@@ -48,6 +58,7 @@ export function useRichTextCommands(
       restoreSelection(editorRef.current, selectionRef.current)
       pendingFontSizeRef.current = sizePx
       applyFontSize(editorRef.current, sizePx, onChange)
+      pendingFontSizeRef.current = null
       rememberSelection()
     },
     [editorRef, onChange, pendingFontSizeRef, rememberSelection, selectionRef],

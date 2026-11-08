@@ -234,6 +234,9 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
     'open-canvas': function (ctx, action) {
       if (action && action.canvasId) enterSubCanvas(action.canvasId)
     },
+    'return-parent-canvas': function () {
+      popSubCanvas()
+    },
   }
   window.PAPERLOOM_ACTION_HANDLERS = ACTION_HANDLERS
   window.PAPERLOOM_ANIMATE = animateElement
@@ -245,14 +248,10 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   }
 
   function selectNode(nodeId) {
-    var node = nodeId === null ? null : nodeById[nodeId]
-    var isImage = node && isImageNode(node)
+    var prevSelectedId = selectedId
     selectedId = nodeId
-    if (!isImage) {
-      expandedId = null
-      closeDetail()
-    } else if (expandedId !== nodeId) {
-      expandedId = nodeId
+    expandedId = null
+    if (nodeId === null || nodeId !== prevSelectedId) {
       closeDetail()
     }
     renderState()
@@ -343,6 +342,7 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
         }
       })
       card.addEventListener('contextmenu', function (event) {
+        event.preventDefault()
         event.stopPropagation()
       })
       card.addEventListener('keydown', function (event) {

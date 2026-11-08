@@ -4,7 +4,6 @@ import { ChevronRight } from 'lucide-react'
 import type { DetailContent } from '../lib/detailContent'
 import { DetailBody } from './DetailBody'
 import { DetailResizeHandle } from './DetailResizeHandle'
-import { ImageLightboxModal } from './ImageLightboxModal'
 
 interface DetailPanelProps {
   readonly detail: DetailContent
@@ -13,13 +12,9 @@ interface DetailPanelProps {
 
 const DEFAULT_WIDTH_PERCENT = 40
 
-/** 详情视图：图片采用自适应圆角弹窗，PDF / 静态文件 / 网页采用可拖拽右侧详情面板 */
+/** 右侧详情面板：图片大图、PDF、静态文件与网页统一在可拖拽宽度的右栏中展示 */
 export function DetailPanel({ detail, onCollapse }: Readonly<DetailPanelProps>) {
   const [widthPercent, setWidthPercent] = useState(DEFAULT_WIDTH_PERCENT)
-
-  if (detail.type === 'image') {
-    return <ImageLightboxModal src={detail.src} alt={detail.alt} onClose={onCollapse} />
-  }
 
   return (
     <aside

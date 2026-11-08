@@ -44,6 +44,7 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
           onAddSibling={editor.addSibling}
           onDeleteNode={editor.deleteNode}
           onChangeNodeKind={editor.changeKind}
+          onUpdateNodeTitle={editor.updateTitle}
           onUpdateNodeImage={editor.updateImage}
           onUpdateNodeFile={editor.updateFile}
           onUpdateLayout={editor.updateLayout}
@@ -79,7 +80,7 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onStartEditing={editor.startEditing}
         onStopEditing={editor.stopEditing}
         onUpdateContent={editor.updateContent}
-        onUpdateTitle={editor.updateTitle}
+        onFitNodeSize={editor.updateLayout}
         onAddImage={editor.addImage}
         onTriggerEvent={editor.triggerNodeEvent}
         onNavigateCanvas={editor.navigateToCanvas}

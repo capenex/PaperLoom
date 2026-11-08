@@ -51,6 +51,9 @@ export type NodeEventAction =
       readonly type: 'open-canvas'
       readonly canvasId: CanvasId
     }
+  | {
+      readonly type: 'return-parent-canvas'
+    }
 
 /** 绑定在节点上的单条交互事件 */
 export interface NodeEventBinding {

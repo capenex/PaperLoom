@@ -1,8 +1,11 @@
 /**
  * 节点事件绑定默认规则与查询工具
  *
- * 将「多媒体节点二次点击弹出右侧大图」「静态文件双击弹出右侧全文」
- * 统一纳入节点事件系统，并支持绑定「双击展开支线画布」与「播放节点动效」。
+ * - 富文本节点默认绑定「双击开始编辑文字」；
+ * - 纯标题节点专为触发事件设计，默认无编辑事件（文字直接在顶部栏修改）；
+ * - 多媒体节点默认绑定「选中后再次单击弹出大图」；
+ * - 静态文件节点默认绑定「双击弹出右侧全文」；
+ * - 支线子画布内的同源起点（入口）节点默认绑定「双击返回上级画布」作为出口。
  */
 
 import type {
@@ -12,6 +15,7 @@ import type {
   NodeEventBinding,
   NodeEventTarget,
   NodeEventTrigger,
+   NodeId,
   PaperNode,
 } from '../types/paper'
 import { REFERENCE_KIND_ATTR } from './reference'
@@ -24,6 +28,8 @@ const DEFAULT_TEXT_EVENTS: readonly NodeEventBinding[] = [
     action: { type: 'edit-node' },
   },
 ]
+
+const DEFAULT_TITLE_EVENTS: readonly NodeEventBinding[] = []
 
 const DEFAULT_IMAGE_EVENTS: readonly NodeEventBinding[] = [
   {
@@ -42,6 +48,14 @@ const DEFAULT_FILE_EVENTS: readonly NodeEventBinding[] = [
     action: { type: 'open-detail' },
   },
 ]
+
+/** 支线子画布的同源起点（入口）节点在子画布内默认作为出口：双击返回上级画布 */
+export const DEFAULT_HOST_EXIT_EVENT: NodeEventBinding = {
+  id: 'default-host-return-parent-canvas',
+  target: 'node',
+  trigger: 'double-click',
+  action: { type: 'return-parent-canvas' },
+}
 
 /** 节点内含本地引用（如 PDF 引用链接）时的默认子元素级事件绑定 */
 export const DEFAULT_REFERENCE_EVENTS: readonly NodeEventBinding[] = [
@@ -77,6 +91,7 @@ export function nodeHasEmbeddedReference(node: PaperNode): boolean {
 
 /** 按节点类型返回默认绑定的交互事件列表 */
 export function defaultEventsForKind(kind: NodeContent['kind']): readonly NodeEventBinding[] {
+  if (kind === 'title') return DEFAULT_TITLE_EVENTS
   if (kind === 'image') return DEFAULT_IMAGE_EVENTS
   if (kind === 'file') return DEFAULT_FILE_EVENTS
   return DEFAULT_TEXT_EVENTS
@@ -90,20 +105,22 @@ export function defaultEventsForNode(node: PaperNode): readonly NodeEventBinding
   return defaultEventsForKind(node.content.kind)
 }
 
-/** 解析节点当前生效的事件列表：若节点未显式配置节点级事件，则补齐该节点的默认事件 */
+/** 解析节点当前生效的事件列表：纯标题节点自动剥离历史遗留的 edit-node 事件 */
 export function resolveNodeEvents(node: PaperNode): readonly NodeEventBinding[] {
   if (node.events === undefined) {
     return defaultEventsForNode(node)
   }
-  const isTextOrTitle = node.content.kind === 'text' || node.content.kind === 'title'
+  if (node.content.kind === 'title') {
+    return node.events.filter((binding) => binding.action.type !== 'edit-node')
+  }
   const hasNodeTarget = node.events.some((binding) => resolveBindingTarget(binding) === 'node')
-  if (isTextOrTitle && !hasNodeTarget) {
+  if (node.content.kind === 'text' && !hasNodeTarget) {
     return [...DEFAULT_TEXT_EVENTS, ...node.events]
   }
   return node.events
 }
 
-/** 判断某动作在当前画布下是否可执行（处于目标子画布内部时不再重复打开自身） */
+/** 判断某动作在当前画布下是否可执行（处于目标子画布内部时不再重复打开自身；返回上级仅在子画布内生效） */
 export function isActionActiveInCanvas(
   action: NodeEventAction,
   activeCanvasId: CanvasId | null = null,
@@ -111,22 +128,38 @@ export function isActionActiveInCanvas(
   if (action.type === 'open-canvas' && action.canvasId === activeCanvasId) {
     return false
   }
+  if (action.type === 'return-parent-canvas') {
+    return activeCanvasId !== null
+  }
   return true
 }
 
-/** 查找节点在指定目标对象与触发时机下可执行的事件绑定 */
+/** 查找节点在指定目标对象与触发时机下可执行的事件绑定；子画布同源起点节点默认双击返回上级画布 */
 export function findTriggeredEvent(
   node: PaperNode,
   trigger: NodeEventTrigger,
   activeCanvasId: CanvasId | null = null,
   target: NodeEventTarget = 'node',
+  activeHostNodeId: NodeId | null = null,
 ): NodeEventBinding | undefined {
-  return resolveNodeEvents(node).find(
-    (binding) =>
-      resolveBindingTarget(binding) === target &&
-      binding.trigger === trigger &&
-      isActionActiveInCanvas(binding.action, activeCanvasId),
-  )
+  const isSubCanvasHost =
+    activeCanvasId !== null && activeHostNodeId !== null && node.id === activeHostNodeId
+
+  const matched = resolveNodeEvents(node).find((binding) => {
+    if (resolveBindingTarget(binding) !== target || binding.trigger !== trigger) return false
+    if (!isActionActiveInCanvas(binding.action, activeCanvasId)) return false
+    // 子画布的同源起点节点在子画布内将双击优先让位给「返回上级画布」，除非显式绑定了另一层子画布或返回动作
+    if (isSubCanvasHost && target === 'node' && trigger === 'double-click') {
+      return binding.action.type === 'open-canvas' || binding.action.type === 'return-parent-canvas'
+    }
+    return true
+  })
+
+  if (matched !== undefined) return matched
+  if (isSubCanvasHost && target === 'node' && trigger === 'double-click') {
+    return DEFAULT_HOST_EXIT_EVENT
+  }
+  return undefined
 }
 
 /** 查找节点本身上绑定的支线子画布 ID（若当前已在该子画布内则返回 null） */

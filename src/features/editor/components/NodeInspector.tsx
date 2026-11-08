@@ -24,6 +24,7 @@ interface NodeInspectorProps {
   readonly onAddSibling: (nodeId: NodeId) => void
   readonly onDelete: (nodeId: NodeId) => void
   readonly onChangeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
+  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly onUpdateImage: (nodeId: NodeId, src: string, alt: string) => void
   readonly onUpdateFile: (
     nodeId: NodeId,
@@ -46,9 +47,12 @@ function NodeInspectorTypeAndEvents(props: Readonly<NodeInspectorProps>) {
   return (
     <>
       <NodeTypeControl
-        kind={node.content.kind}
+        content={node.content}
         onChangeKind={(kind) => {
           props.onChangeKind(node.id, kind)
+        }}
+        onUpdateTitle={(title, subtitle) => {
+          props.onUpdateTitle(node.id, title, subtitle)
         }}
         onPickImage={(src, alt) => {
           props.onUpdateImage(node.id, src, alt)
@@ -61,6 +65,7 @@ function NodeInspectorTypeAndEvents(props: Readonly<NodeInspectorProps>) {
       <NodeEventControl
         node={node}
         activeCanvasId={activeCanvasId}
+        isHostRoot={props.isHostRoot}
         onUpdateEvents={(events) => {
           props.onUpdateEvents(node.id, events)
         }}
@@ -75,7 +80,7 @@ function NodeInspectorTypeAndEvents(props: Readonly<NodeInspectorProps>) {
   )
 }
 
-/** 选中节点的操作区：增删同级/子节点、切换节点类型、编辑事件绑定与节点尺寸 */
+/** 选中节点的操作区：增删同级/子节点、切换节点类型（及标题行内修改）、编辑事件绑定与节点尺寸 */
 export function NodeInspector(props: Readonly<NodeInspectorProps>) {
   const { node, defaults, rootCount, isHostRoot } = props
   const size = resolveNodeSize(node.layout, defaults)

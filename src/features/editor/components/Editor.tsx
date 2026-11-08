@@ -1,3 +1,4 @@
+import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import { findTriggeredEvent } from '@/shared/lib/nodeEvents'
 import type {
   BreadcrumbItem,
@@ -30,7 +31,7 @@ interface EditorProps {
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onStopEditing: () => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
-  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
+  readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined
@@ -50,6 +51,7 @@ function dispatchPopupEvent(
   nodeId: NodeId | undefined,
   trigger: 'click' | 'double-click',
   activeCanvasId: CanvasId | null,
+  activeHostNodeId: NodeId | null,
   openDetailFromPopup: () => void,
   closePreview: () => void,
   onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void,
@@ -63,7 +65,13 @@ function dispatchPopupEvent(
     if (trigger === 'click') openDetailFromPopup()
     return
   }
-  const binding = findTriggeredEvent(sourceNode, trigger, activeCanvasId, 'reference-popup')
+  const binding = findTriggeredEvent(
+    sourceNode,
+    trigger,
+    activeCanvasId,
+    'reference-popup',
+    activeHostNodeId,
+  )
   if (binding === undefined) return
   if (binding.action.type === 'open-detail') {
     openDetailFromPopup()
@@ -86,6 +94,7 @@ export function Editor(props: Readonly<EditorProps>) {
       preview.preview?.nodeId,
       trigger,
       props.activeCanvasId ?? null,
+      props.activeHostNodeId ?? null,
       preview.openDetailFromPopup,
       preview.closePreview,
       props.onTriggerEvent,
@@ -97,19 +106,35 @@ export function Editor(props: Readonly<EditorProps>) {
       <EditorCanvas
         {...props}
         canPopSubCanvasWithEscape={canPopWithEsc}
-        onSelectNode={(nodeId) => { preview.closePreview(); props.onSelectNode(nodeId) }}
-        onTriggerEvent={(nodeId, action) => { preview.closePreview(); props.onTriggerEvent(nodeId, action) }}
+        onSelectNode={(nodeId) => {
+          preview.closePreview()
+          props.onSelectNode(nodeId)
+        }}
+        onTriggerEvent={(nodeId, action) => {
+          preview.closePreview()
+          props.onTriggerEvent(nodeId, action)
+        }}
         onOpenReferencePreview={preview.openPreview}
         onOpenReferenceDetail={preview.openDetail}
-        onBackgroundClick={() => { preview.closePreview(); props.onSelectNode(null) }}
-        onBackgroundContextMenu={() => { preview.closePreview(); props.onCollapseExpandedMedia() }}
+        onBackgroundClick={() => {
+          preview.closePreview()
+          props.onSelectNode(null)
+        }}
+        onBackgroundContextMenu={() => {
+          preview.closePreview()
+          props.onCollapseExpandedMedia()
+        }}
       />
       {detail !== null && <DetailPanel detail={detail} onCollapse={props.onCollapseDetail} />}
       {preview.preview !== null && (
         <ReferencePreviewPopup
           preview={preview.preview}
-          onOpenDetail={() => { firePopup('click') }}
-          onDoubleClickDetail={() => { firePopup('double-click') }}
+          onOpenDetail={() => {
+            firePopup('click')
+          }}
+          onDoubleClickDetail={() => {
+            firePopup('double-click')
+          }}
           onClose={preview.closePreview}
         />
       )}

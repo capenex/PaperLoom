@@ -6,18 +6,20 @@ import { Check } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { useRichTextCommands } from '../hooks/useRichTextCommands'
 import type { RichTextCommands } from '../hooks/useRichTextCommands'
-import {
-  applyMarkdownShortcut,
-  exitHeadingOrQuoteOnEnter,
-  flushPendingInlineMarkdown,
-} from '../lib/markdownShortcuts'
 import { extractImageFiles } from '../lib/inboxUpload'
-import { emitHtml, insertPlainText } from '../lib/richText'
+import {
+  compileMarkdownRichTextHtml,
+  decompileRichTextToEditableHtml,
+  unwrapElement,
+} from '../lib/markdownRichText'
+import { emitHtml, insertPlainText, placeCaretAtEnd } from '../lib/richText'
 import { RichTextToolbar } from './RichTextToolbar'
 
-/** 底部弹出编辑器输入框样式：宽敞留白，节点本身在画布正上方实时渲染 */
+const PURE_MD_TAG_TEXT = /^[\s\u00A0\u200B]*(?:#{1,3}|[-*>]|\d+\.|\*{1,2}|~~|`|\$)+[\s\u00A0\u200B]*$/u
+
+/** 底部弹出编辑器输入框样式：宽敞留白、标准 I 型文本光标与主题色插入符，节点在画布正上方实时渲染 */
 const RICH_TEXT_INPUT_CLASS =
-  'rich-text-editor min-h-0 flex-1 w-full overflow-y-auto bg-white px-5 py-4 leading-relaxed text-slate-700 outline-none'
+  'rich-text-editor min-h-0 flex-1 w-full cursor-text overflow-y-auto bg-white px-5 py-4 leading-relaxed text-slate-700 caret-primary outline-none'
 
 interface RichTextEditorProps {
   readonly value: string
@@ -41,31 +43,42 @@ interface FloatingFormatToolbarProps {
   readonly onDone: () => void
 }
 
+function stripInjectedOklchStyleInPlace(editor: HTMLDivElement | null): void {
+  if (editor === null) return
+  editor.querySelectorAll('span[style*="oklch"]').forEach((span) => {
+    span.removeAttribute('style')
+  })
+  editor.querySelectorAll('a, font, span, b, strong, i, em, u, s, del, strike').forEach((el) => {
+    if (el.classList.contains('pl-math')) return
+    if (PURE_MD_TAG_TEXT.test(el.textContent ?? '')) {
+      unwrapElement(el)
+    }
+  })
+}
+
 function useInitialContent(
   editorRef: RefObject<HTMLDivElement | null>,
-  pendingFontSizeRef: RefObject<number | null>,
   html: string,
   onChange: (html: string) => void,
+  onSelectionChange: () => void,
 ): void {
   const initialValue = useRef(html)
   const initialOnChange = useRef(onChange)
+  const initialOnSelectionChange = useRef(onSelectionChange)
 
   useEffect(() => {
     const element = editorRef.current
     if (element === null) return
-    element.innerHTML = initialValue.current
-    if (flushPendingInlineMarkdown(element)) {
-      emitHtml(element, initialOnChange.current, pendingFontSizeRef.current)
+    const editableHtml = decompileRichTextToEditableHtml(initialValue.current)
+    element.innerHTML = editableHtml
+    const compiled = compileMarkdownRichTextHtml(editableHtml)
+    if (compiled !== initialValue.current) {
+      initialOnChange.current(compiled)
     }
     element.focus({ preventScroll: true })
-    const range = document.createRange()
-    range.selectNodeContents(element)
-    range.collapse(false)
-    const selection = window.getSelection()
-    if (selection === null) return
-    selection.removeAllRanges()
-    selection.addRange(range)
-  }, [editorRef, pendingFontSizeRef])
+    placeCaretAtEnd(element)
+    initialOnSelectionChange.current()
+  }, [editorRef])
 }
 
 function emitContent(
@@ -73,20 +86,8 @@ function emitContent(
   pendingFontSizeRef: RefObject<number | null>,
   onChange: (html: string) => void,
 ): void {
-  applyMarkdownShortcut(editorRef.current)
+  stripInjectedOklchStyleInPlace(editorRef.current)
   emitHtml(editorRef.current, onChange, pendingFontSizeRef.current)
-}
-
-function flushAndEmit(
-  editorRef: RefObject<HTMLDivElement | null>,
-  pendingFontSizeRef: RefObject<number | null>,
-  onChange: (html: string) => void,
-): boolean {
-  if (flushPendingInlineMarkdown(editorRef.current)) {
-    emitHtml(editorRef.current, onChange, pendingFontSizeRef.current)
-    return true
-  }
-  return false
 }
 
 function pastePlainText(
@@ -96,10 +97,11 @@ function pastePlainText(
   onChange: (html: string) => void,
   onSelectionChange: () => void,
 ): void {
-  if (extractImageFiles(event.clipboardData).length > 0) return
+  const plainText = event.clipboardData.getData('text/plain')
+  if (plainText === '' && extractImageFiles(event.clipboardData).length > 0) return
   event.preventDefault()
-  insertPlainText(editorRef.current, event.clipboardData.getData('text/plain'))
-  flushPendingInlineMarkdown(editorRef.current)
+  event.stopPropagation()
+  insertPlainText(editorRef.current, plainText)
   emitContent(editorRef, pendingFontSizeRef, onChange)
   onSelectionChange()
 }
@@ -111,37 +113,34 @@ function dropPlainText(
   onChange: (html: string) => void,
   onSelectionChange: () => void,
 ): void {
-  if (extractImageFiles(event.dataTransfer).length > 0) return
+  const plainText = event.dataTransfer.getData('text/plain')
+  if (plainText === '' && extractImageFiles(event.dataTransfer).length > 0) return
   event.preventDefault()
-  insertPlainText(editorRef.current, event.dataTransfer.getData('text/plain'))
-  flushPendingInlineMarkdown(editorRef.current)
+  event.stopPropagation()
+  insertPlainText(editorRef.current, plainText)
   emitContent(editorRef, pendingFontSizeRef, onChange)
   onSelectionChange()
 }
 
 function handleEditorKeyDown(
   event: KeyboardEvent<HTMLDivElement>,
+  composing: boolean,
   editorRef: RefObject<HTMLDivElement | null>,
   pendingFontSizeRef: RefObject<number | null>,
   onChange: (html: string) => void,
   onEscape: () => void,
 ): void {
+  if (composing || event.nativeEvent.isComposing) return
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
-    flushAndEmit(editorRef, pendingFontSizeRef, onChange)
+    emitContent(editorRef, pendingFontSizeRef, onChange)
     onEscape()
     return
   }
-  if (event.key === 'ArrowRight' && flushAndEmit(editorRef, pendingFontSizeRef, onChange)) {
+  if (event.key === 'Tab') {
     event.preventDefault()
-    return
-  }
-  if (event.key === 'Enter') {
-    flushAndEmit(editorRef, pendingFontSizeRef, onChange)
-  }
-  if (exitHeadingOrQuoteOnEnter(editorRef.current, event.key, event.shiftKey)) {
-    event.preventDefault()
+    insertPlainText(editorRef.current, '  ')
     emitContent(editorRef, pendingFontSizeRef, onChange)
   }
 }
@@ -155,7 +154,8 @@ function RichTextInput({
   onSelectionChange,
   onEscape,
 }: Readonly<RichTextInputProps>) {
-  useInitialContent(editorRef, pendingFontSizeRef, initialHtml, onChange)
+  const composingRef = useRef(false)
+  useInitialContent(editorRef, initialHtml, onChange, onSelectionChange)
 
   return (
     <div
@@ -166,14 +166,21 @@ function RichTextInput({
       contentEditable
       tabIndex={0}
       spellCheck={false}
-      data-placeholder="输入内容，支持 # 标题、**加粗**、`代码`、$公式$ 等快捷语法…"
+      data-placeholder="输入 Markdown 源码（# 标题、- 列表、**加粗**、`代码`、$公式$），或选中文本设置富文本样式…"
       className={RICH_TEXT_INPUT_CLASS}
       style={{ fontSize }}
-      onInput={() => {
-        emitContent(editorRef, pendingFontSizeRef, onChange)
+      onCompositionStart={() => {
+        composingRef.current = true
       }}
       onCompositionEnd={() => {
+        composingRef.current = false
         emitContent(editorRef, pendingFontSizeRef, onChange)
+        onSelectionChange()
+      }}
+      onInput={(event) => {
+        if (composingRef.current || event.nativeEvent.isComposing) return
+        emitContent(editorRef, pendingFontSizeRef, onChange)
+        onSelectionChange()
       }}
       onPaste={(event) => {
         pastePlainText(event, editorRef, pendingFontSizeRef, onChange, onSelectionChange)
@@ -184,11 +191,18 @@ function RichTextInput({
       onKeyUp={onSelectionChange}
       onMouseUp={onSelectionChange}
       onBlur={() => {
-        flushAndEmit(editorRef, pendingFontSizeRef, onChange)
-        onSelectionChange()
+        if (composingRef.current) return
+        emitContent(editorRef, pendingFontSizeRef, onChange)
       }}
       onKeyDown={(event) => {
-        handleEditorKeyDown(event, editorRef, pendingFontSizeRef, onChange, onEscape)
+        handleEditorKeyDown(
+          event,
+          composingRef.current,
+          editorRef,
+          pendingFontSizeRef,
+          onChange,
+          onEscape,
+        )
       }}
     />
   )
@@ -207,7 +221,7 @@ function FloatingFormatToolbar({ commands, onDone }: Readonly<FloatingFormatTool
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-slate-400">上方节点实时渲染 · Esc 完成</span>
+        <span className="text-[11px] text-slate-400">Markdown 源码 + 富文本 · 上方节点实时渲染 · Esc 完成</span>
         <Button
           type="button"
           variant="ghost"
@@ -236,7 +250,7 @@ export function RichTextEditor({
   const commands = useRichTextCommands(editorRef, selectionRef, pendingFontSizeRef, onChange)
 
   function finishEditing(): void {
-    flushAndEmit(editorRef, pendingFontSizeRef, onChange)
+    emitContent(editorRef, pendingFontSizeRef, onChange)
     onDone()
   }
 

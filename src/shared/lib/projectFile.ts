@@ -90,7 +90,8 @@ function isEventAction(value: unknown): value is NodeEventAction {
   if (
     value.type === 'edit-node' ||
     value.type === 'open-detail' ||
-    value.type === 'open-reference-preview'
+    value.type === 'open-reference-preview' ||
+    value.type === 'return-parent-canvas'
   ) {
     return true
   }

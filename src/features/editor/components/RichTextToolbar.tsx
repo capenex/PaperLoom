@@ -6,6 +6,7 @@ import {
   Highlighter,
   Italic,
   List,
+  ListOrdered,
   Palette,
   Strikethrough,
   Underline,
@@ -60,6 +61,7 @@ const TEXT_ACTIONS: readonly ToolbarAction[] = [
   { command: 'underline', label: '下划线', icon: Underline },
   { command: 'strikeThrough', label: '删除线', icon: Strikethrough },
   { command: 'insertUnorderedList', label: '无序列表', icon: List },
+  { command: 'insertOrderedList', label: '有序列表', icon: ListOrdered },
 ]
 
 function ToolbarDivider() {
@@ -108,6 +110,9 @@ function ColorButton({
         aria-label={label}
         defaultValue={defaultValue}
         className="absolute inset-0 size-full cursor-pointer opacity-0"
+        onClick={(event) => {
+          onCommand(command, event.currentTarget.value)
+        }}
         onChange={handleChange}
       />
     </label>

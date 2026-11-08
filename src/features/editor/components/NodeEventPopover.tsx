@@ -11,7 +11,12 @@ import type {
   NodeEventTrigger,
 } from '@/shared/types/paper'
 
-type ActionOptionValue = 'edit-node' | 'open-canvas' | 'open-detail' | 'open-reference-preview'
+type ActionOptionValue =
+  | 'edit-node'
+  | 'open-canvas'
+  | 'return-parent-canvas'
+  | 'open-detail'
+  | 'open-reference-preview'
 
 interface NodeEventPopoverProps {
   readonly kind: NodeContent['kind']
@@ -29,8 +34,12 @@ function actionToOptionValue(action: NodeEventAction): ActionOptionValue {
   return action.type
 }
 
-function optionValueToAction(value: ActionOptionValue, existingAction: NodeEventAction): NodeEventAction {
+function optionValueToAction(
+  value: ActionOptionValue,
+  existingAction: NodeEventAction,
+): NodeEventAction {
   if (value === 'edit-node') return { type: 'edit-node' }
+  if (value === 'return-parent-canvas') return { type: 'return-parent-canvas' }
   if (value === 'open-detail') return { type: 'open-detail' }
   if (value === 'open-reference-preview') return { type: 'open-reference-preview' }
   const canvasId = existingAction.type === 'open-canvas' ? existingAction.canvasId : createId()
@@ -41,6 +50,7 @@ function isActionOption(val: string): val is ActionOptionValue {
   return (
     val === 'edit-node' ||
     val === 'open-canvas' ||
+    val === 'return-parent-canvas' ||
     val === 'open-detail' ||
     val === 'open-reference-preview'
   )
@@ -50,7 +60,11 @@ function TargetRow({
   target,
   onChangeTarget,
   onDelete,
-}: Readonly<{ target: NodeEventTarget; onChangeTarget: (target: NodeEventTarget) => void; onDelete: () => void }>) {
+}: Readonly<{
+  target: NodeEventTarget
+  onChangeTarget: (target: NodeEventTarget) => void
+  onDelete: () => void
+}>) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">触发对象</span>
@@ -59,7 +73,9 @@ function TargetRow({
         value={target}
         onChange={(e) => {
           const val = e.target.value
-          if (val === 'node' || val === 'reference' || val === 'reference-popup') onChangeTarget(val)
+          if (val === 'node' || val === 'reference' || val === 'reference-popup') {
+            onChangeTarget(val)
+          }
         }}
         className={SELECT_CLS}
       >
@@ -84,7 +100,11 @@ function TriggerRow({
   target,
   trigger,
   onChangeTrigger,
-}: Readonly<{ target: NodeEventTarget; trigger: NodeEventTrigger; onChangeTrigger: (trigger: NodeEventTrigger) => void }>) {
+}: Readonly<{
+  target: NodeEventTarget
+  trigger: NodeEventTrigger
+  onChangeTrigger: (trigger: NodeEventTrigger) => void
+}>) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">触发时机</span>
@@ -93,7 +113,9 @@ function TriggerRow({
         value={trigger}
         onChange={(e) => {
           const val = e.target.value
-          if (val === 'double-click' || val === 'second-click' || val === 'click') onChangeTrigger(val)
+          if (val === 'double-click' || val === 'second-click' || val === 'click') {
+            onChangeTrigger(val)
+          }
         }}
         className={SELECT_CLS}
       >
@@ -106,10 +128,12 @@ function TriggerRow({
 }
 
 function ActionRow({
+  kind,
   action,
   onChangeAction,
   onEnterCanvas,
 }: Readonly<{
+  kind: NodeContent['kind']
   action: NodeEventAction
   onChangeAction: (value: ActionOptionValue) => void
   onEnterCanvas: (canvasId: CanvasId) => void
@@ -125,8 +149,11 @@ function ActionRow({
         }}
         className={SELECT_CLS}
       >
-        <option value="edit-node">开始编辑节点内容</option>
+        {(kind === 'text' || action.type === 'edit-node') && (
+          <option value="edit-node">开始编辑节点内容</option>
+        )}
         <option value="open-canvas">展开支线画布</option>
+        <option value="return-parent-canvas">返回上级画布</option>
         <option value="open-detail">弹出详情视图（大图/PDF/全文）</option>
         <option value="open-reference-preview">弹出引用预览小窗</option>
       </select>
@@ -177,11 +204,13 @@ function PopoverHeader({
 }
 
 function EventBindingItem({
+  kind,
   binding,
   onChange,
   onDelete,
   onEnterCanvas,
 }: Readonly<{
+  kind: NodeContent['kind']
   binding: NodeEventBinding
   onChange: (next: NodeEventBinding) => void
   onDelete: () => void
@@ -207,6 +236,7 @@ function EventBindingItem({
         }}
       />
       <ActionRow
+        kind={kind}
         action={binding.action}
         onChangeAction={(val) => {
           onChange({ ...binding, action: optionValueToAction(val, binding.action) })
@@ -217,10 +247,17 @@ function EventBindingItem({
   )
 }
 
-function EmptyEventsState({ onBind }: Readonly<{ onBind: () => void }>) {
+function EmptyEventsState({
+  kind,
+  onBind,
+}: Readonly<{ kind: NodeContent['kind']; onBind: () => void }>) {
+  const hint =
+    kind === 'title'
+      ? '纯标题节点专为触发事件设计，当前暂未绑定事件'
+      : '当前无绑定事件'
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-4 text-center">
-      <span className="text-xs text-slate-400">当前无特殊事件（双击默认编辑文字）</span>
+      <span className="text-xs text-slate-400">{hint}</span>
       <button
         type="button"
         onClick={onBind}
@@ -249,24 +286,34 @@ export function NodeEventPopover(props: Readonly<NodeEventPopoverProps>) {
       aria-label="节点绑定事件编辑器"
       className="absolute top-9 left-0 z-50 w-84 rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_16px_40px_-8px_rgba(15,23,42,0.18)]"
     >
-      <PopoverHeader onAdd={handleAdd} onResetDefaults={() => { onUpdateEvents(defaultEvents) }} />
+      <PopoverHeader
+        onAdd={handleAdd}
+        onResetDefaults={() => {
+          onUpdateEvents(defaultEvents)
+        }}
+      />
       {events.length === 0 ? (
-        <EmptyEventsState onBind={onBindBranchCanvas} />
+        <EmptyEventsState kind={kind} onBind={onBindBranchCanvas} />
       ) : (
         <div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
           {events.map((b) => (
             <EventBindingItem
               key={b.id}
+              kind={kind}
               binding={b}
-              onChange={(next) => { onUpdateEvents(events.map((i) => (i.id === b.id ? next : i))) }}
-              onDelete={() => { onUpdateEvents(events.filter((i) => i.id !== b.id)) }}
+              onChange={(next) => {
+                onUpdateEvents(events.map((i) => (i.id === b.id ? next : i)))
+              }}
+              onDelete={() => {
+                onUpdateEvents(events.filter((i) => i.id !== b.id))
+              }}
               onEnterCanvas={onEnterCanvas}
             />
           ))}
         </div>
       )}
       <p className="mt-2.5 text-[11px] leading-relaxed text-slate-400">
-        提示：触发对象可选「节点本身」「节点内引用链接」或「引用预览小窗」，自由定制点击或双击行为。
+        提示：在支线子画布内，同源起点节点默认绑定「双击返回上级画布」。
       </p>
     </section>
   )

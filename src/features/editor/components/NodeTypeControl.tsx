@@ -3,13 +3,14 @@ import type { ChangeEvent } from 'react'
 import { FileCode, FileText, Heading, Image, ImagePlus } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
-import type { NodeContent, StaticFileFormat } from '@/shared/types/paper'
+import type { NodeContent, StaticFileFormat, TitleNodeContent } from '@/shared/types/paper'
 import { INBOX_SAVE_FAILED, saveImageFileToInbox } from '../lib/inboxUpload'
 import { detectStaticFileFormat } from '../lib/staticMarkdown'
 
 interface NodeTypeControlProps {
-  readonly kind: NodeContent['kind']
+  readonly content: NodeContent
   readonly onChangeKind: (kind: NodeContent['kind']) => void
+  readonly onUpdateTitle: (title: string, subtitle: string) => void
   readonly onPickImage: (src: string, alt: string) => void
   readonly onPickFile: (fileName: string, format: StaticFileFormat, text: string) => void
 }
@@ -40,7 +41,7 @@ const NODE_KIND_ITEMS = [
   {
     value: 'title',
     label: '纯标题',
-    title: '切换为纯标题节点（默认样式展示主标题与可选副标题）',
+    title: '切换为纯标题节点（专为触发事件设计，在顶部工具栏直接输入主副标题）',
     Icon: Heading,
   },
   {
@@ -61,6 +62,9 @@ const NODE_KIND_ITEMS = [
   readonly title: string
   readonly Icon: typeof FileText
 }[]
+
+const TITLE_INPUT_CLS =
+  'h-7 rounded-lg border border-slate-200/90 bg-white px-2.5 text-xs text-slate-800 shadow-2xs transition-colors outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20'
 
 function NodeKindButtons({ kind, onChangeKind }: Readonly<NodeKindButtonsProps>) {
   return (
@@ -90,6 +94,39 @@ function NodeKindButtons({ kind, onChangeKind }: Readonly<NodeKindButtonsProps>)
         </Button>
       ))}
     </fieldset>
+  )
+}
+
+function InlineTitleInputs({
+  content,
+  onUpdateTitle,
+}: Readonly<{
+  content: TitleNodeContent
+  onUpdateTitle: (title: string, subtitle: string) => void
+}>) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <input
+        type="text"
+        aria-label="主标题"
+        placeholder="输入主标题…"
+        value={content.title}
+        onChange={(event) => {
+          onUpdateTitle(event.target.value, content.subtitle)
+        }}
+        className={`${TITLE_INPUT_CLS} w-32 font-semibold sm:w-36`}
+      />
+      <input
+        type="text"
+        aria-label="副标题"
+        placeholder="输入副标题（可选）…"
+        value={content.subtitle}
+        onChange={(event) => {
+          onUpdateTitle(content.title, event.target.value)
+        }}
+        className={`${TITLE_INPUT_CLS} w-36 text-slate-600 sm:w-44`}
+      />
+    </div>
   )
 }
 
@@ -178,19 +215,23 @@ function PickStaticFileButton({ onPickFile }: Readonly<PickStaticFileButtonProps
   )
 }
 
-/** 节点操作栏中的节点类型切换（富文本 / 纯标题 / 多媒体 / 静态文件）及资源导入 */
+/** 节点操作栏中的节点类型切换（富文本 / 纯标题 / 多媒体 / 静态文件）、标题行内编辑及资源导入 */
 export function NodeTypeControl({
-  kind,
+  content,
   onChangeKind,
+  onUpdateTitle,
   onPickImage,
   onPickFile,
 }: Readonly<NodeTypeControlProps>) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="hidden text-xs text-slate-500 2xl:inline">节点类型</span>
-      <NodeKindButtons kind={kind} onChangeKind={onChangeKind} />
-      {kind === 'image' && <ReplaceImageButton onPickImage={onPickImage} />}
-      {kind === 'file' && <PickStaticFileButton onPickFile={onPickFile} />}
+      <NodeKindButtons kind={content.kind} onChangeKind={onChangeKind} />
+      {content.kind === 'title' && (
+        <InlineTitleInputs content={content} onUpdateTitle={onUpdateTitle} />
+      )}
+      {content.kind === 'image' && <ReplaceImageButton onPickImage={onPickImage} />}
+      {content.kind === 'file' && <PickStaticFileButton onPickFile={onPickFile} />}
     </div>
   )
 }

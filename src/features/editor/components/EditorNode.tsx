@@ -4,6 +4,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from 'cn'
 
 import { EXPANDED_MEDIA_SCALE, resolveNodeSize } from '@/shared/lib/nodeDefaults'
+import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import { findBoundSubCanvasId } from '@/shared/lib/nodeEvents'
 import type {
   CanvasId,
@@ -28,6 +29,7 @@ interface EditorNodeProps {
   readonly editing: boolean
   readonly expanded: boolean
   readonly activeCanvasId?: CanvasId | null | undefined
+  readonly activeHostNodeId?: NodeId | null | undefined
   readonly isHostRoot?: boolean | undefined
   /** 这张卡片正被 Alt 拖动 */
   readonly dragging: boolean
@@ -39,6 +41,7 @@ interface EditorNodeProps {
   readonly detachHint: boolean
   readonly onSelect: (nodeId: NodeId) => void
   readonly onEdit: (nodeId: NodeId) => void
+  readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
@@ -72,7 +75,7 @@ function cardClassName(
     'shadow-[0_2px_10px_-2px_rgba(15,23,42,0.06),0_1px_3px_-1px_rgba(15,23,42,0.04)]',
     anyDragging
       ? 'transition-[transform,box-shadow,border-color,outline-color,opacity] duration-200 ease-out'
-      : 'transition-[transform,left,top,box-shadow,border-color,outline-color,opacity] duration-250 ease-out',
+      : 'transition-[transform,left,top,width,height,box-shadow,border-color,outline-color,opacity] duration-250 ease-out',
     'hover:border-slate-300/90 hover:shadow-[0_10px_24px_-4px_rgba(15,23,42,0.1)] focus-visible:outline-none',
     'border-slate-200/90 bg-white text-slate-900',
     flushPadding ? 'p-0' : 'px-3.5 py-2.5',
@@ -171,14 +174,18 @@ function nodeAccessibleLabel(node: PaperNode): string {
   return text.length > 40 ? `${text.slice(0, 40)}…` : text
 }
 
-function nodeAriaLabel(node: PaperNode, hasSubCanvas: boolean): string {
+function nodeAriaLabel(node: PaperNode, hasSubCanvas: boolean, isHostRoot: boolean): string {
   const label = nodeAccessibleLabel(node)
-  const suffix = hasSubCanvas ? '，双击展开支线画布' : ''
+  const suffix = hasSubCanvas
+    ? '，双击展开支线画布'
+    : isHostRoot
+      ? '，双击返回上级画布'
+      : ''
   if (node.content.kind === 'image') {
-    return `图片节点：${label}，点击放大，再次点击查看弹窗大图${suffix}`
+    return `图片节点：${label}，再次点击在右侧展开大图${suffix}`
   }
   if (node.content.kind === 'title') {
-    return `标题节点：${label}${suffix || '，双击编辑标题与副标题'}`
+    return `标题节点：${label}${suffix || '，在顶部工具栏修改文字与绑定事件'}`
   }
   if (node.content.kind === 'file') {
     return `静态文件节点：${label}${suffix || '，双击在右侧展开查看全文'}`
@@ -187,18 +194,29 @@ function nodeAriaLabel(node: PaperNode, hasSubCanvas: boolean): string {
 }
 
 const ALT_DRAG_HINT = '按住 Alt 拖动：拖到节点上成为其子节点，拖到空白处脱离为新根节点'
+const CTRL_FIT_HINT = 'Ctrl+左键自动缩放至贴合内容大小'
 
-function nodeTitle(node: PaperNode, hasSubCanvas: boolean): string {
+function nodeTitle(node: PaperNode, hasSubCanvas: boolean, isHostRoot: boolean): string {
+  const fitSuffix =
+    node.content.kind === 'text' || node.content.kind === 'title' ? `；${CTRL_FIT_HINT}` : ''
   if (hasSubCanvas) {
-    return `双击展开支线画布（Alt+双击可原地编辑文字）；${ALT_DRAG_HINT}`
+    const editHint = node.content.kind === 'text' ? '（Alt+双击可编辑富文本）' : ''
+    return `双击展开支线画布${editHint}${fitSuffix}；${ALT_DRAG_HINT}`
+  }
+  if (isHostRoot) {
+    const editHint = node.content.kind === 'text' ? '（Alt+双击可编辑富文本）' : ''
+    return `双击返回上级画布${editHint}${fitSuffix}；${ALT_DRAG_HINT}`
   }
   if (node.content.kind === 'image') {
-    return `点击放大 1.5x，再次点击弹出大图，右键空白处还原；${ALT_DRAG_HINT}`
+    return `选中后再次点击弹出右栏大图；${ALT_DRAG_HINT}`
   }
   if (node.content.kind === 'file') {
     return `静态文件预览，双击在右侧展开查看全文；${ALT_DRAG_HINT}`
   }
-  return `双击编辑内容；${ALT_DRAG_HINT}`
+  if (node.content.kind === 'title') {
+    return `选中后在顶部栏输入标题与绑定事件${fitSuffix}；${ALT_DRAG_HINT}`
+  }
+  return `双击编辑内容${fitSuffix}；${ALT_DRAG_HINT}`
 }
 
 function nodeStyle(width: number, height: number, position: Point, expanded: boolean): CSSProperties {
@@ -221,14 +239,19 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
   const flushPadding = isImage || node.content.kind === 'file'
   const imageExpanded = isImage && props.expanded
   const activeCanvasId = props.activeCanvasId ?? null
+  const activeHostNodeId = props.activeHostNodeId ?? null
+  const isHostRoot = Boolean(props.isHostRoot)
   const hasSubCanvas = findBoundSubCanvasId(node, activeCanvasId) !== null
   const handlers = cardHandlers({
     node,
+    defaults,
     selected,
     imageExpanded,
     activeCanvasId,
+    activeHostNodeId,
     onSelect: props.onSelect,
     onEdit: props.onEdit,
+    onFitNodeSize: props.onFitNodeSize,
     onTriggerEvent: props.onTriggerEvent,
     onOpenReferencePreview: props.onOpenReferencePreview,
     onOpenReferenceDetail: props.onOpenReferenceDetail,
@@ -241,8 +264,8 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={nodeAriaLabel(node, hasSubCanvas)}
-      title={nodeTitle(node, hasSubCanvas)}
+      aria-label={nodeAriaLabel(node, hasSubCanvas, isHostRoot)}
+      title={nodeTitle(node, hasSubCanvas, isHostRoot)}
       data-node-id={node.id}
       className={cn(
         cardClassName(
@@ -257,7 +280,7 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
       style={nodeStyle(size.width, size.height, position, imageExpanded)}
       {...handlers}
     >
-      <NodeBadge hasSubCanvas={hasSubCanvas} isHostRoot={Boolean(props.isHostRoot)} />
+      <NodeBadge hasSubCanvas={hasSubCanvas} isHostRoot={isHostRoot} />
       <NodeBody node={node} fontSize={defaults.fontSize} />
     </div>
   )

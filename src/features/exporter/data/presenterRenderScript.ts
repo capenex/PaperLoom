@@ -28,6 +28,9 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     badge.className = isHostRoot ? 'node-badge is-host' : 'node-badge'
     badge.textContent = isHostRoot ? '支线起点' : '支线'
     card.appendChild(badge)
+    if (isHostRoot && !hasSubCanvas) {
+      card.title = '双击返回上级画布'
+    }
   }
 
   function renderBreadcrumbs(onNavigate, onPop) {
@@ -152,8 +155,8 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         media.appendChild(image)
         card.appendChild(media)
         var imageLabel = image.alt === '' ? '未命名图片' : image.alt
-        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，点击放大，再次点击查看大图' + branchHint)
-        card.title = hasSubCanvas ? '双击展开支线画布；点击放大 1.5x' : '点击放大 1.5x，再次点击查看大图，右键空白处还原'
+        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，再次点击在右侧展开大图' + branchHint)
+        card.title = hasSubCanvas ? '双击展开支线画布；再次点击弹出右栏大图' : '选中后再次点击弹出右栏大图'
       } else if (content.kind === 'title') {
         var titleBox = document.createElement('div')
         titleBox.className = 'node-title-box'

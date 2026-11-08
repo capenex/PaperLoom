@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 
+import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import type {
   BreadcrumbItem,
   CanvasId,
@@ -31,7 +32,7 @@ interface EditorCanvasProps {
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onStopEditing: () => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
-  readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
+  readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined

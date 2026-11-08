@@ -87,12 +87,13 @@ function measureSubtree(
   return { widths, maxNodeHeight }
 }
 
-/** 子树内各列的横向偏移：根节点列落在原点，其后每列按上一列宽度加间距递推 */
+/** 子树内各列的横向中心偏移：相邻两列中心距 = 左列半宽 + 右列半宽 + 列间距，确保节点变宽时自动推开邻列 */
 function computeColumnOffsets(widths: readonly number[]): readonly number[] {
   const offsets = [0]
   for (let depth = 1; depth < widths.length; depth += 1) {
     const previousOffset = offsets[depth - 1] ?? 0
-    offsets[depth] = previousOffset + (widths[depth - 1] ?? 0) + COLUMN_GAP
+    const halfSpan = Math.round(((widths[depth - 1] ?? 0) + (widths[depth] ?? 0)) / 2)
+    offsets[depth] = previousOffset + halfSpan + COLUMN_GAP
   }
   return offsets
 }
@@ -123,9 +124,11 @@ function layoutSubtree(
 
   visit(rootId, 0)
   const rootY = raw.get(rootId)?.y ?? 0
-  const local = new Map<NodeId, Point>()
+  const local = new Map<NodeId, Point>([[rootId, { x: columnOffsets[0] ?? 0, y: 0 }]])
   raw.forEach((point, id) => {
-    local.set(id, { x: point.x, y: point.y - rootY })
+    if (id !== rootId) {
+      local.set(id, { x: point.x, y: point.y - rootY })
+    }
   })
   return local
 }
@@ -157,7 +160,50 @@ function placeSubtree(
   return placed
 }
 
-/** 按 rootIds 顺序定位全部子树；孤立的非根节点没有归属，不参与布局 */
+function shiftSubtree(subtree: readonly PlacedNode[], dx: number, dy: number): readonly PlacedNode[] {
+  return subtree.map((item) => ({
+    ...item,
+    center: { x: item.center.x + dx, y: item.center.y + dy },
+  }))
+}
+
+/** 当某棵子树内的节点放大后与周围其他子树发生重叠时，将相邻子树整体向外推开 */
+function resolveSubtreeOverlaps(subtrees: readonly (readonly PlacedNode[])[]): readonly PlacedNode[] {
+  const resolved = [...subtrees]
+  for (let i = 0; i < resolved.length; i += 1) {
+    const first = resolved[i]
+    const rootA = first?.[0]
+    if (first === undefined || rootA === undefined) continue
+    const boundsA = boundsOf(first)
+
+    for (let j = i + 1; j < resolved.length; j += 1) {
+      const second = resolved[j]
+      const rootB = second?.[0]
+      if (second === undefined || rootB === undefined) continue
+      const boundsB = boundsOf(second)
+      const overlapRight = boundsA.maxX + ROW_GAP - boundsB.minX
+      const overlapLeft = boundsB.maxX + ROW_GAP - boundsA.minX
+      const overlapDown = boundsA.maxY + ROW_GAP - boundsB.minY
+      const overlapUp = boundsB.maxY + ROW_GAP - boundsA.minY
+      if (overlapRight <= 0 || overlapLeft <= 0 || overlapDown <= 0 || overlapUp <= 0) continue
+
+      const rootDx = rootB.center.x - rootA.center.x
+      const rootDy = rootB.center.y - rootA.center.y
+      const pushVert = rootDy >= 0 ? overlapDown : -overlapUp
+      const pushHoriz = rootDx >= 0 ? overlapRight : -overlapLeft
+      const preferHorizontal =
+        Math.abs(rootDx) > Math.abs(rootDy) && Math.abs(pushHoriz) < Math.abs(pushVert)
+      resolved[j] = shiftSubtree(
+        second,
+        preferHorizontal ? pushHoriz : 0,
+        preferHorizontal ? 0 : pushVert,
+      )
+    }
+  }
+  return resolved.flat()
+}
+
+/** 按 rootIds 顺序定位全部子树，并在子树放大相交时自动推开邻近子树 */
 function placeAllNodes(
   nodes: readonly PaperNode[],
   rootIds: readonly NodeId[],
@@ -169,13 +215,13 @@ function placeAllNodes(
   }
   const childrenOf = buildChildrenMap(nodes)
 
-  const placed: PlacedNode[] = []
+  const subtrees: (readonly PlacedNode[])[] = []
   for (const rootId of rootIds) {
     const root = nodeById.get(rootId)
     if (root === undefined) continue
-    placed.push(...placeSubtree(root, nodeById, childrenOf, defaults))
+    subtrees.push(placeSubtree(root, nodeById, childrenOf, defaults))
   }
-  return placed
+  return resolveSubtreeOverlaps(subtrees)
 }
 
 function boundsOf(placed: readonly PlacedNode[]): Bounds {
@@ -240,10 +286,8 @@ export function layoutDocument(
   }
 }
 
-/** 节点在原始坐标（未经归一化平移）中的位置：根节点取自身锚点，其余由舞台坐标反推 */
+/** 节点在原始坐标（未经归一化平移）中的位置：优先由当前舞台坐标反推（含子树避让偏移） */
 export function rawPositionOf(node: PaperNode, layout: DocumentLayout): Point {
-  if (node.parentId === null) return { x: node.layout.x, y: node.layout.y }
-
   const position = layout.positions.get(node.id)
   if (position === undefined) return { x: node.layout.x, y: node.layout.y }
   return { x: position.x - layout.origin.x, y: position.y - layout.origin.y }

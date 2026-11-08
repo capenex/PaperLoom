@@ -157,7 +157,7 @@ function useNodeTextAndKindActions({
       setDocument((curr) =>
         applyInCanvas(curr, activeCanvasId, (slice) => changeNodeKind(slice, nodeId, kind)),
       )
-      if (kind !== 'text' && kind !== 'title') {
+      if (kind !== 'text') {
         setEditingNodeId((curr) => (curr === nodeId ? null : curr))
       }
       if (kind !== 'image') {

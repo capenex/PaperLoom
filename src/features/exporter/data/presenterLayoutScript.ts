@@ -60,7 +60,8 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
 
     var columnOffsets = [0]
     for (var depth = 1; depth < columnWidths.length; depth += 1) {
-      columnOffsets[depth] = columnOffsets[depth - 1] + (columnWidths[depth - 1] || 0) + COLUMN_GAP
+      var halfSpan = Math.round(((columnWidths[depth - 1] || 0) + (columnWidths[depth] || 0)) / 2)
+      columnOffsets[depth] = columnOffsets[depth - 1] + halfSpan + COLUMN_GAP
     }
     var rowHeight = Math.max(MIN_ROW_HEIGHT, maxNodeHeight + ROW_GAP)
 
@@ -92,6 +93,21 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     return local
   }
 
+  function subtreeBoundsOf(items) {
+    var sMinX = Infinity
+    var sMinY = Infinity
+    var sMaxX = -Infinity
+    var sMaxY = -Infinity
+    items.forEach(function (item) {
+      var sz = sizeOf(nodeById[item.id])
+      sMinX = Math.min(sMinX, item.x - sz.width / 2)
+      sMinY = Math.min(sMinY, item.y - sz.height / 2)
+      sMaxX = Math.max(sMaxX, item.x + sz.width / 2)
+      sMaxY = Math.max(sMaxY, item.y + sz.height / 2)
+    })
+    return { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY }
+  }
+
   function computeSliceLayout(sliceNodes, sliceRootIds) {
     nodes = Array.isArray(sliceNodes) ? sliceNodes : []
     rootIds = Array.isArray(sliceRootIds) ? sliceRootIds : []
@@ -104,18 +120,54 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
       childrenOf[node.parentId].push(node)
     })
 
-    var placed = []
+    var subtrees = []
     rootIds.forEach(function (rootId) {
       var root = nodeById[rootId]
       if (!root) return
       var anchor = root.layout || {}
       var local = layoutSubtree(rootId)
+      var items = [{ id: rootId, x: anchor.x || 0, y: anchor.y || 0 }]
       Object.keys(local).forEach(function (id) {
-        placed.push({
+        if (id === rootId) return
+        items.push({
           id: id,
           x: (anchor.x || 0) + local[id].x,
           y: (anchor.y || 0) + local[id].y,
         })
+      })
+      subtrees.push(items)
+    })
+
+    for (var i = 0; i < subtrees.length; i += 1) {
+      var rootA = subtrees[i][0]
+      if (!rootA) continue
+      var bA = subtreeBoundsOf(subtrees[i])
+      for (var j = i + 1; j < subtrees.length; j += 1) {
+        var rootB = subtrees[j][0]
+        if (!rootB) continue
+        var bB = subtreeBoundsOf(subtrees[j])
+        var ovRight = bA.maxX + ROW_GAP - bB.minX
+        var ovLeft = bB.maxX + ROW_GAP - bA.minX
+        var ovDown = bA.maxY + ROW_GAP - bB.minY
+        var ovUp = bB.maxY + ROW_GAP - bA.minY
+        if (ovRight <= 0 || ovLeft <= 0 || ovDown <= 0 || ovUp <= 0) continue
+        var rDx = rootB.x - rootA.x
+        var rDy = rootB.y - rootA.y
+        var pVert = rDy >= 0 ? ovDown : -ovUp
+        var pHoriz = rDx >= 0 ? ovRight : -ovLeft
+        var useHoriz = Math.abs(rDx) > Math.abs(rDy) && Math.abs(pHoriz) < Math.abs(pVert)
+        var dx = useHoriz ? pHoriz : 0
+        var dy = useHoriz ? 0 : pVert
+        subtrees[j] = subtrees[j].map(function (it) {
+          return { id: it.id, x: it.x + dx, y: it.y + dy }
+        })
+      }
+    }
+
+    var placed = []
+    subtrees.forEach(function (items) {
+      items.forEach(function (it) {
+        placed.push(it)
       })
     })
 
@@ -181,8 +233,16 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     return Array.isArray(node.events) ? node.events : defaultEventsForNode(node)
   }
 
+  var DEFAULT_HOST_EXIT_EVENT = {
+    id: 'default-host-return-parent-canvas',
+    target: 'node',
+    trigger: 'double-click',
+    action: { type: 'return-parent-canvas' },
+  }
+
   function isActionActiveInCanvas(action, canvasId) {
     if (!action || !action.type || action.type === 'edit-node') return false
+    if (action.type === 'return-parent-canvas') return Boolean(canvasId)
     if (action.type === 'open-canvas') {
       return Boolean(action.canvasId && action.canvasId !== canvasId && subCanvases[action.canvasId])
     }
@@ -190,14 +250,31 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
   }
 
   function findTriggeredEvent(node, trigger, canvasId, target) {
+    if (!node) return null
     var expectedTarget = target || 'node'
+    var isSubCanvasHost = Boolean(
+      canvasId && subCanvases[canvasId] && subCanvases[canvasId].hostNodeId === node.id,
+    )
     var list = resolveNodeEvents(node)
     for (var i = 0; i < list.length; i += 1) {
       var binding = list[i]
       var bTarget = (binding && binding.target) || 'node'
-      if (bTarget === expectedTarget && binding.trigger === trigger && isActionActiveInCanvas(binding.action, canvasId)) {
+      if (
+        bTarget === expectedTarget &&
+        binding.trigger === trigger &&
+        isActionActiveInCanvas(binding.action, canvasId)
+      ) {
+        if (isSubCanvasHost && expectedTarget === 'node' && trigger === 'double-click') {
+          if (binding.action.type === 'open-canvas' || binding.action.type === 'return-parent-canvas') {
+            return binding
+          }
+          continue
+        }
         return binding
       }
+    }
+    if (isSubCanvasHost && expectedTarget === 'node' && trigger === 'double-click') {
+      return DEFAULT_HOST_EXIT_EVENT
     }
     return null
   }
