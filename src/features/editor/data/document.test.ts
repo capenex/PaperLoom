@@ -118,6 +118,10 @@ void test('updateTitleNodeContent and updateFileNodeContent work', () => {
   assert.ok(rootId !== undefined)
 
   doc = changeNodeKind(doc, rootId, 'title')
+  const switched = doc.nodes.find((n) => n.id === rootId)
+  if (switched?.content.kind === 'title') {
+    assert.equal(switched.content.subtitle, '')
+  }
   doc = updateTitleNodeContent(doc, rootId, '架构总览', '核心模块与数据流')
   const titleNode = doc.nodes.find((n) => n.id === rootId)
   assert.equal(titleNode?.content.kind, 'title')

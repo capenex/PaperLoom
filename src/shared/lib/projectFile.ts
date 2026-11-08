@@ -140,11 +140,22 @@ function isPaperNode(value: unknown): value is PaperNode | LegacyPaperNode {
   )
 }
 
-/** 旧存档的单父 parentId 迁移为 parentIds 数组 */
+/** 旧版纯标题节点注入的占位副标题，载入时清掉 */
+const LEGACY_TITLE_SUBTITLE = '在顶部栏修改标题与绑定事件'
+
+/** 旧存档的单父 parentId 迁移为 parentIds 数组，并清理占位副标题 */
 function normalizeNode(node: PaperNode | LegacyPaperNode): PaperNode {
-  if ('parentIds' in node) return node
-  const { parentId, ...rest } = node
-  return { ...rest, parentIds: parentId === null ? [] : [parentId] }
+  let normalized: PaperNode
+  if ('parentIds' in node) {
+    normalized = node
+  } else {
+    const { parentId, ...rest } = node
+    normalized = { ...rest, parentIds: parentId === null ? [] : [parentId] }
+  }
+  if (normalized.content.kind === 'title' && normalized.content.subtitle === LEGACY_TITLE_SUBTITLE) {
+    return { ...normalized, content: { ...normalized.content, subtitle: '' } }
+  }
+  return normalized
 }
 
 function isSubCanvas(value: unknown): value is RawSubCanvas {
