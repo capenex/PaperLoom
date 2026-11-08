@@ -86,6 +86,17 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
   const drag = useNodeDrag({ ...props, document, layout, stageRef })
   const imagePasteDrop = useImagePasteDrop({ ...props, layout, stageRef })
   const focusTarget = resolveFocusTarget(document, props.editingNodeId, layout)
+  const hostId = props.activeHostNodeId ?? null
+  const hostPosition = hostId === null ? undefined : layout.positions.get(hostId)
+  const entryTarget =
+    hostPosition === undefined
+      ? null
+      : {
+          x: hostPosition.x,
+          y: hostPosition.y,
+          stageWidth: layout.width,
+          stageHeight: layout.height,
+        }
 
   return (
     <div
@@ -107,6 +118,8 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
         )}
       <CanvasViewport
         focusTarget={focusTarget}
+        canvasKey={props.activeCanvasId ?? 'main'}
+        entryTarget={entryTarget}
         shouldIgnoreBackgroundClick={drag.shouldSuppressClick}
         onBackgroundClick={props.onBackgroundClick}
         onBackgroundContextMenu={props.onBackgroundContextMenu}

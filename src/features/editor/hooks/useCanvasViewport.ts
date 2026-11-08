@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   CSSProperties,
   Dispatch,
@@ -7,17 +7,14 @@ import type {
   SetStateAction,
 } from 'react'
 
+import { entryViewForHost } from '../lib/canvasView'
+import type { CanvasView, EntryTarget } from '../lib/canvasView'
+
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
 const WHEEL_ZOOM_SPEED = 0.001
 const DRAG_THRESHOLD = 4
 const GRID_SIZE = 24
-
-interface CanvasView {
-  readonly zoom: number
-  readonly x: number
-  readonly y: number
-}
 
 interface DragState {
   readonly pointerId: number
@@ -172,10 +169,34 @@ function useCanvasPan(
   return { panning, onPointerDown, onPointerMove, onPointerUp, shouldIgnoreClick }
 }
 
-/** 画布视口：拖动空白处平移、滚轮以指针为中心缩放，网格随视口同步移动 */
-export function useCanvasViewport(focusTarget?: ViewportFocusTarget | null): CanvasViewportState {
+/** 画布视口：每张画布各自记忆平移缩放；首次进入子画布时把入口节点框到靠左居中 */
+export function useCanvasViewport(
+  focusTarget?: ViewportFocusTarget | null,
+  canvasKey = 'main',
+  entryTarget?: EntryTarget | null,
+): CanvasViewportState {
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const viewsRef = useRef<Map<string, CanvasView>>(new Map())
   const [view, setView] = useState<CanvasView>(INITIAL_VIEW)
+  const viewRef = useRef(view)
+  const keyRef = useRef(canvasKey)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
+  useLayoutEffect(() => {
+    if (keyRef.current === canvasKey) return
+    viewsRef.current.set(keyRef.current, viewRef.current)
+    keyRef.current = canvasKey
+    const saved = viewsRef.current.get(canvasKey)
+    const rect = viewportRef.current?.getBoundingClientRect()
+    const next =
+      saved ??
+      (entryTarget !== undefined && entryTarget !== null && rect !== undefined
+        ? entryViewForHost(entryTarget, { width: rect.width, height: rect.height })
+        : INITIAL_VIEW)
+    viewRef.current = next
+    setView(next)
+  }, [canvasKey, entryTarget])
   const [lastFocusKey, setLastFocusKey] = useState<string | null>(null)
   const targetKey = focusTarget?.key ?? null
   if (targetKey !== lastFocusKey) {
