@@ -1,5 +1,5 @@
 import { Editor, EditorToolbar, useEditor, useProjectPersistence } from '@/features/editor'
-import { ExportButton } from '@/features/exporter'
+import { ProjectPackageControls } from '@/features/exporter'
 
 interface EditorSectionProps {
   readonly editor: ReturnType<typeof useEditor>
@@ -52,8 +52,11 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
           onEditNodeText={editor.startEditing}
         />
       </div>
-      <div className="w-36 shrink-0">
-        <ExportButton document={editor.document} />
+      <div className="w-48 shrink-0">
+        <ProjectPackageControls
+          document={editor.document}
+          onRestoreDocument={editor.replaceDocument}
+        />
       </div>
     </header>
   )

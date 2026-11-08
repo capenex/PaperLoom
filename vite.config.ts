@@ -36,6 +36,9 @@ const MIME_BY_EXT: Readonly<Record<string, string>> = {
   '.svg': 'image/svg+xml',
   '.avif': 'image/avif',
   '.bmp': 'image/bmp',
+  '.pdf': 'application/pdf',
+  '.html': 'text/html; charset=utf-8',
+  '.htm': 'text/html; charset=utf-8',
 };
 
 function handleInboxUpload(req: IncomingMessage, res: ServerResponse, rawUrl: string): boolean {

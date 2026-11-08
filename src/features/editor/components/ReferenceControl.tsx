@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react'
 import { Paperclip } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
+import { uploadBlobToInbox } from '@/shared/lib/inbox'
 import { referenceKindFromFileName, referenceKindFromMime } from '@/shared/lib/reference'
 import type { PaperReference } from '@/shared/types/paper'
 import { PdfCropDialog } from './PdfCropDialog'
@@ -65,7 +66,13 @@ export function ReferenceControl({ onReference }: Readonly<ReferenceControlProps
       setCropFile(file)
       return
     }
-    onReference({ kind, src: URL.createObjectURL(file), label: file.name })
+    uploadBlobToInbox(file, file.name)
+      .then((src) => {
+        onReference({ kind, src, label: file.name })
+      })
+      .catch((error: unknown) => {
+        window.alert(error instanceof Error ? error.message : '引用资源写入 res/inbox 失败')
+      })
   }
 
   return (

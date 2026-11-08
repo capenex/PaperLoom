@@ -27,7 +27,13 @@ export function PdfCropDialog({ file, onCancel, onConfirm }: Readonly<PdfCropDia
 
   const confirm = useCallback(() => {
     if (preview === null) return
-    onConfirm(createPdfReference(file, pageNumber, preview))
+    createPdfReference(file, pageNumber, preview)
+      .then((reference) => {
+        onConfirm(reference)
+      })
+      .catch((error: unknown) => {
+        window.alert(error instanceof Error ? error.message : '引用资源写入 res/inbox 失败')
+      })
   }, [file, onConfirm, pageNumber, preview])
 
   return (

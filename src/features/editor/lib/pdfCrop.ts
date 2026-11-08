@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 // eslint-disable-next-line import/default -- Vite 的 ?url 后缀在运行时给出 worker 资源地址，pdfjs 的类型声明里没有这个默认导出
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
+import { uploadBlobToInbox } from '@/shared/lib/inbox'
 import type { PaperReference } from '@/shared/types/paper'
 
 export interface CropPoint {
@@ -110,13 +111,21 @@ export function cropToPreview(
   })
 }
 
-/** 预览图给单击弹窗，页码给双击跳转全文 */
-export function createPdfReference(file: File, pageNumber: number, preview: Blob): PaperReference {
+/** 预览图给单击弹窗，页码给双击跳转全文；PDF 原文件与预览图都落盘到 res/inbox/，刷新后依然有效 */
+export async function createPdfReference(
+  file: File,
+  pageNumber: number,
+  preview: Blob,
+): Promise<PaperReference> {
+  const [src, previewSrc] = await Promise.all([
+    uploadBlobToInbox(file, file.name),
+    uploadBlobToInbox(preview, `${file.name}.preview.png`),
+  ])
   return {
     kind: 'pdf',
-    src: URL.createObjectURL(file),
+    src,
     label: file.name,
     page: pageNumber,
-    previewSrc: URL.createObjectURL(preview),
+    previewSrc,
   }
 }

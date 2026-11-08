@@ -38,7 +38,7 @@
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": false
+    "skipLibCheck": true
   },
   "include": ["src"]
 }

@@ -5,7 +5,7 @@
  * 并生成对应的多媒体节点内容（ImageNodeContent）。
  */
 
-import { createInboxFileName, createInboxRelativePath } from '@/shared/lib/inbox'
+import { uploadBlobToInbox } from '@/shared/lib/inbox'
 import type { ImageNodeContent } from '@/shared/types/paper'
 
 const IMAGE_FILE_NAME_PATTERN = /\.(?:png|jpe?g|webp|gif|svg|avif|bmp)$/iu
@@ -86,34 +86,16 @@ export function hasFilesInDataTransfer(dataTransfer: DataTransfer | null): boole
 export const INBOX_SAVE_FAILED =
   '图片写入 res/inbox 失败，请确认开发服务器（npm run dev）正在运行'
 
-async function postInboxFile(inboxFileName: string, file: File): Promise<Response | null> {
-  try {
-    return await fetch(`/api/res/inbox?name=${encodeURIComponent(inboxFileName)}`, {
-      method: 'POST',
-      headers: {
-        'content-type': file.type || 'application/octet-stream',
-      },
-      body: file,
-    })
-  } catch {
-    return null
-  }
-}
-
 /** 将图片文件存入 res/inbox/<timestamp>.<ext>，返回可直接用于多媒体节点的 ImageNodeContent */
 export async function saveImageFileToInbox(
   file: File,
   nowMs = Date.now(),
 ): Promise<ImageNodeContent> {
-  const inboxFileName = createInboxFileName(file.type, file.name, nowMs)
-  const response = await postInboxFile(inboxFileName, file)
-  // 只接受真正落盘的链接：对象 URL 活不过刷新，写进工程文件就是死链接
-  if (response === null || !response.ok) {
-    throw new Error(INBOX_SAVE_FAILED)
-  }
+  const src = await uploadBlobToInbox(file, file.name, nowMs)
+  const inboxFileName = src.slice(src.lastIndexOf('/') + 1)
   return {
     kind: 'image',
-    src: `/${createInboxRelativePath(inboxFileName)}`,
+    src,
     alt: file.name.trim() === '' ? inboxFileName : file.name,
   }
 }
