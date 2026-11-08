@@ -2,12 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Window } from 'happy-dom'
 
-import {
-  cleanBrowserArtifacts,
-  compileMarkdownRichTextHtml,
-  decompileRichTextToEditableHtml,
-  toggleMarkdownListPrefix,
-} from './markdownRichText'
+import { cleanBrowserArtifacts } from './markdownClean'
+import { decompileRichTextToEditableHtml } from './markdownDecompile'
+import { compileMarkdownRichTextHtml, toggleMarkdownListPrefix } from './markdownRichText'
+import { collectMarkdownSyntaxSpans } from './markdownSyntaxSpans'
 import {
   clearEditorFormatting,
   guardSelectionAgainstMarkdownSyntax,
@@ -183,6 +181,135 @@ void test('clearEditorFormatting removes hyperlinks, local references, and inlin
   selection.addRange(lineWithPrefixRange)
   assert.equal(guardSelectionAgainstMarkdownSyntax(editor), true)
   assert.equal(selection.toString(), '高校学生')
+
+  editor.remove()
+})
+
+void test('backslash escapes render literal syntax chars and double backslash renders one backslash', () => {
+  assert.equal(compileMarkdownRichTextHtml('<div>\\\\</div>'), '<div>\\</div>')
+  assert.equal(compileMarkdownRichTextHtml('<div>\\$5 和 \\$10</div>'), '<div>$5 和 $10</div>')
+  assert.equal(compileMarkdownRichTextHtml('<div>\\# 不是标题</div>'), '<div># 不是标题</div>')
+  assert.equal(compileMarkdownRichTextHtml('<div>\\- 不是列表</div>'), '<div>- 不是列表</div>')
+  assert.equal(compileMarkdownRichTextHtml('<div>\\*不是斜体\\*</div>'), '<div>*不是斜体*</div>')
+  assert.equal(compileMarkdownRichTextHtml('<div>\\`不是代码\\`</div>'), '<div>`不是代码`</div>')
+  assert.equal(compileMarkdownRichTextHtml('<div>\\\\$E=mc^2$</div>'), '<div>\\<span class="pl-math" data-pl-math="E=mc^2" contenteditable="false" title="双击修改公式">E=mc<sup>2</sup></span></div>')
+})
+
+void test('escaped char keeps its own rich styling while the escape backslash is consumed', () => {
+  const styledBackslash = '<div>\\<font style="font-size: 32px">\\</font></div>'
+  assert.equal(
+    compileMarkdownRichTextHtml(styledBackslash),
+    '<div><font style="font-size: 32px">\\</font></div>',
+  )
+
+  const referencedBackslash = '<div>\\<a href="/res/inbox/x.png" data-pl-ref="image">\\</a></div>'
+  assert.equal(
+    compileMarkdownRichTextHtml(referencedBackslash),
+    '<div><a href="/res/inbox/x.png" data-pl-ref="image">\\</a></div>',
+  )
+
+  const styledDollar = '<div>\\<font color="#7c3aed">$</font>5</div>'
+  assert.equal(
+    compileMarkdownRichTextHtml(styledDollar),
+    '<div><font color="#7c3aed">$</font>5</div>',
+  )
+
+  const storedStyledDollar = '<div><font color="#7c3aed">$</font>5 与 \\</div>'
+  const dollarSource = decompileRichTextToEditableHtml(storedStyledDollar)
+  assert.equal(dollarSource, '<div><font color="#7c3aed">\\$</font>5 与 \\\\</div>')
+  assert.equal(compileMarkdownRichTextHtml(dollarSource), storedStyledDollar)
+})
+
+void test('decompile escapes literal dollars and backslashes so they survive recompilation', () => {
+  const stored = '<div>价格 $5 与 $10，路径 C:\\temp，星号 * 与记号 `x`</div>'
+  const source = decompileRichTextToEditableHtml(stored)
+  assert.equal(
+    source,
+    '<div>价格 \\$5 与 \\$10，路径 C:\\\\temp，星号 \\* 与记号 \\`x\\`</div>',
+  )
+  assert.equal(compileMarkdownRichTextHtml(source), stored)
+})
+
+void test('literal block token at line start is escaped on decompile and stays a paragraph', () => {
+  const stored = '<div># 字面标题</div><div>1. 字面序号</div>'
+  const source = decompileRichTextToEditableHtml(stored)
+  assert.equal(source, '<div>\\# 字面标题</div><div>1\\. 字面序号</div>')
+  assert.equal(compileMarkdownRichTextHtml(source), stored)
+})
+
+void test('math tex with backslashes round-trips through source escaping', () => {
+  const editorHtml = '<div>$\\frac{a}{b}$</div>'
+  const compiled = compileMarkdownRichTextHtml(editorHtml)
+  assert.ok(compiled.includes('data-pl-math="\\frac{a}{b}"'))
+  const source = decompileRichTextToEditableHtml(compiled)
+  assert.equal(source, '<div>$\\\\frac{a}{b}$</div>')
+  assert.equal(compileMarkdownRichTextHtml(source), compiled)
+})
+
+void test('collectMarkdownSyntaxSpans marks escape backslash but not the escaped char', () => {
+  assert.deepEqual(collectMarkdownSyntaxSpans('\\\\'), [{ start: 0, end: 1 }])
+  assert.deepEqual(collectMarkdownSyntaxSpans('\\$5'), [{ start: 0, end: 1 }])
+  assert.deepEqual(collectMarkdownSyntaxSpans('- 项目'), [{ start: 0, end: 2 }])
+  assert.deepEqual(collectMarkdownSyntaxSpans('**加粗**'), [
+    { start: 0, end: 2 },
+    { start: 4, end: 6 },
+  ])
+  assert.deepEqual(collectMarkdownSyntaxSpans('$E=mc^2$'), [
+    { start: 0, end: 1 },
+    { start: 7, end: 8 },
+  ])
+  assert.deepEqual(collectMarkdownSyntaxSpans('普通文本'), [])
+})
+
+void test('guard protects the escape backslash but allows styling the escaped backslash', () => {
+  const editor = document.createElement('div')
+  editor.innerHTML = '<div>\\\\</div>'
+  document.body.appendChild(editor)
+  const text = editor.firstElementChild?.firstChild
+  assert.ok(text instanceof Text)
+  const selection = window.getSelection()
+  assert.ok(selection !== null)
+  const range = document.createRange()
+
+  range.setStart(text, 0)
+  range.setEnd(text, 1)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  assert.equal(guardSelectionAgainstMarkdownSyntax(editor), false)
+
+  range.setStart(text, 1)
+  range.setEnd(text, 2)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  assert.equal(guardSelectionAgainstMarkdownSyntax(editor), true)
+  assert.equal(selection.toString(), '\\')
+
+  range.setStart(text, 0)
+  range.setEnd(text, 2)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  assert.equal(guardSelectionAgainstMarkdownSyntax(editor), true)
+  assert.equal(selection.toString(), '\\')
+
+  editor.remove()
+})
+
+void test('guard trims inline markdown delimiters from selection edges', () => {
+  const editor = document.createElement('div')
+  editor.innerHTML = '<div>**加粗**</div>'
+  document.body.appendChild(editor)
+  const text = editor.firstElementChild?.firstChild
+  assert.ok(text instanceof Text)
+  const selection = window.getSelection()
+  assert.ok(selection !== null)
+  const range = document.createRange()
+  range.setStart(text, 0)
+  range.setEnd(text, 6)
+  selection.removeAllRanges()
+  selection.addRange(range)
+
+  assert.equal(guardSelectionAgainstMarkdownSyntax(editor), true)
+  assert.equal(selection.toString(), '加粗')
 
   editor.remove()
 })

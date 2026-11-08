@@ -7,19 +7,14 @@ import {
   REFERENCE_KIND_ATTR,
 } from '@/shared/lib/reference'
 import type { PaperReference } from '@/shared/types/paper'
-import {
-  cleanBrowserArtifacts,
-  compileMarkdownRichTextHtml,
-  toggleMarkdownListPrefix,
-  unwrapElement,
-} from './markdownRichText'
+import { cleanBrowserArtifacts, unwrapElement } from './markdownClean'
+import { compileMarkdownRichTextHtml, toggleMarkdownListPrefix } from './markdownRichText'
+import { collectMarkdownSyntaxSpans } from './markdownSyntaxSpans'
 import { placeCaretAt } from './markdownShortcuts'
 
 const FONT_SIZE_MARKER = '7'
 const SAFE_LINK_PATTERN = /^(?:https?:|mailto:|tel:|#|\/|\.{1,2}\/)/iu
 const HAS_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/iu
-const PURE_MD_SELECTION_PATTERN = /^[\s\u00A0\u200B]*(?:#{1,3}|[-*>]|\d+\.|\*{1,2}|~~|`|\$)+[\s\u00A0\u200B]*$/u
-const LEADING_LINE_MD_PATTERN = /^\u200B*(?:#{1,3}|>|[-*]|\d+\.)[ \u00A0]*/u
 const CLEARABLE_FORMAT_SELECTOR = 'a, font, span, b, strong, i, em, u, s, del, strike, sub, sup'
 
 function execEditorCommand(command: string, value?: string): boolean {
@@ -106,24 +101,42 @@ function selectionInsideEditor(editor: HTMLDivElement): boolean {
   return editor.contains(selection.getRangeAt(0).commonAncestorContainer)
 }
 
-function isLineLeadingTextNode(editor: HTMLDivElement, textNode: Text): boolean {
-  let cur: Node | null = textNode
+/** 选区所在的行容器：顶层行 div；裸内联内容退回编辑器根 */
+function lineContainerOf(editor: HTMLDivElement, node: Node): Node {
+  let cur: Node | null = node
   while (cur !== null && cur !== editor) {
-    if (cur.previousSibling !== null) return false
-    const parent: Node | null = cur.parentNode
-    if (parent === editor || (parent instanceof HTMLElement && parent.tagName === 'DIV')) {
-      return true
-    }
-    cur = parent
+    if (cur.parentNode === editor && cur instanceof HTMLElement && cur.tagName === 'DIV') return cur
+    cur = cur.parentNode
   }
-  return false
+  return editor
+}
+
+function lineTextIndex(line: Node, container: Node, offset: number): number {
+  const range = document.createRange()
+  range.setStart(line, 0)
+  range.setEnd(container, offset)
+  return range.toString().length
+}
+
+function locateLineIndex(line: Node, index: number): { readonly node: Node; readonly offset: number } {
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+  let acc = 0
+  let last: Text | null = null
+  for (let cur = walker.nextNode(); cur !== null; cur = walker.nextNode()) {
+    if (!(cur instanceof Text)) continue
+    last = cur
+    if (acc + cur.data.length >= index) return { node: cur, offset: index - acc }
+    acc += cur.data.length
+  }
+  if (last !== null) return { node: last, offset: last.data.length }
+  return { node: line, offset: 0 }
 }
 
 /**
- * 阻止对 Markdown 语法符号本身（如 `# `、`- `、`1. `、`> `、`**`）挂载链接、引用或富文本样式：
- * - 若选区包含行首 Markdown 前缀，自动将选区起点推过该前缀；
- * - 若仅选中了纯 Markdown 语法符号，返回 false 直接拦截；
- * - 若光标折叠在行首 Markdown 前缀内部，插入元素前先将光标移到前缀之后。
+ * 阻止对 Markdown 语法字符（行首前缀、转义反斜杠、`**`/`$` 等定界符）挂载富文本样式：
+ * - 选区边缘落在语法区间内时自动收缩到内容部分；仅选中语法则直接拦截；
+ * - 单行选区内部仍含语法时拦截，保证语法不会被样式包裹；
+ * - 转义对里只有第一个反斜杠受保护，被转义的第二个字符可随意设置字号、挂引用。
  */
 export function guardSelectionAgainstMarkdownSyntax(editor: HTMLDivElement): boolean {
   const selection = window.getSelection()
@@ -131,34 +144,44 @@ export function guardSelectionAgainstMarkdownSyntax(editor: HTMLDivElement): boo
   const range = selection.getRangeAt(0)
   if (!editor.contains(range.commonAncestorContainer)) return true
 
+  const startLine = lineContainerOf(editor, range.startContainer)
+  const endLine = lineContainerOf(editor, range.endContainer)
+  const startSpans = collectMarkdownSyntaxSpans(startLine.textContent ?? '')
+  const startIndex = lineTextIndex(startLine, range.startContainer, range.startOffset)
+
   if (range.collapsed) {
-    if (range.startContainer instanceof Text && isLineLeadingTextNode(editor, range.startContainer)) {
-      const match = LEADING_LINE_MD_PATTERN.exec(range.startContainer.data)
-      if (match !== null && range.startOffset < match[0].length) {
-        placeCaretAt(range.startContainer, match[0].length)
-      }
+    const span = startSpans.find((s) => startIndex >= s.start && startIndex < s.end)
+    if (span !== undefined) {
+      const loc = locateLineIndex(startLine, span.end)
+      placeCaretAt(loc.node, loc.offset)
     }
     return true
   }
 
-  if (PURE_MD_SELECTION_PATTERN.test(selection.toString())) {
-    return false
+  let newStart = startIndex
+  for (const span of startSpans) {
+    if (newStart >= span.start && newStart < span.end) newStart = span.end
+  }
+  const endSpans =
+    startLine === endLine ? startSpans : collectMarkdownSyntaxSpans(endLine.textContent ?? '')
+  const endIndex = lineTextIndex(endLine, range.endContainer, range.endOffset)
+  let newEnd = endIndex
+  for (const span of endSpans) {
+    if (newEnd > span.start && newEnd <= span.end) newEnd = span.start
   }
 
-  if (range.startContainer instanceof Text && isLineLeadingTextNode(editor, range.startContainer)) {
-    const match = LEADING_LINE_MD_PATTERN.exec(range.startContainer.data)
-    if (match !== null && range.startOffset < match[0].length) {
-      const nextStart = Math.min(range.startContainer.data.length, match[0].length)
-      if (range.endContainer === range.startContainer && range.endOffset <= nextStart) {
-        return false
-      }
-      range.setStart(range.startContainer, nextStart)
-      selection.removeAllRanges()
-      selection.addRange(range)
-    }
+  if (startLine === endLine) {
+    if (newEnd <= newStart) return false
+    if (startSpans.some((span) => span.start >= newStart && span.end <= newEnd)) return false
   }
 
-  return !PURE_MD_SELECTION_PATTERN.test(selection.toString())
+  const startLoc = locateLineIndex(startLine, newStart)
+  const endLoc = locateLineIndex(endLine, newEnd)
+  range.setStart(startLoc.node, startLoc.offset)
+  range.setEnd(endLoc.node, endLoc.offset)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
 }
 
 /**

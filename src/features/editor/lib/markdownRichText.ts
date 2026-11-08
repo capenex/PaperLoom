@@ -1,8 +1,19 @@
 import { escapeHtmlText } from '@/shared/lib/html'
 import { renderInlineMathHtml } from './mathFormula'
+import { BLOCK_TAG_PATTERN, cleanBrowserArtifacts } from './markdownClean'
+import {
+  decompileRichTextToEditableHtml,
+  firstLeadingTextNode,
+  hasChildBlockElement,
+  splitNodesAtBr,
+} from './markdownDecompile'
+import {
+  neutralizeBackslashEscapes,
+  restoreEscapeSentinels,
+  restoreEscapeSentinelsInHtml,
+} from './markdownEscapes'
 import { placeCaretAt } from './markdownShortcuts'
 
-const BLOCK_TAG_PATTERN = /^(?:DIV|P|H[1-6]|BLOCKQUOTE|UL|OL|LI|PRE)$/iu
 const RENDERED_BLOCK_DETECT_PATTERN = /<(?:h[1-6]|ul|ol|blockquote|pre)\b|class="pl-math"/iu
 const HEADING_PREFIX_PATTERN = /^(\u200B*#{1,3})[ \u00A0]+/u
 const QUOTE_PREFIX_PATTERN = /^\u200B*>[ \u00A0]+/u
@@ -11,197 +22,17 @@ const OL_PREFIX_PATTERN = /^\u200B*\d+\.[ \u00A0]+/u
 
 interface InlineMarkdownRule {
   readonly pattern: RegExp
+  readonly marker: string
   readonly render: (inner: string) => string
 }
 
 const INLINE_COMPILE_RULES: readonly InlineMarkdownRule[] = [
-  { pattern: /\*\*([^*\s][^*]*?)\*\*/u, render: (t) => `<strong data-pl-md="**">${escapeHtmlText(t)}</strong>` },
-  { pattern: /~~([^~\s][^~]*?)~~/u, render: (t) => `<del data-pl-md="~~">${escapeHtmlText(t)}</del>` },
-  { pattern: /`([^`\n]+)`/u, render: (t) => `<code>${escapeHtmlText(t)}</code>` },
-  { pattern: /(?:^|[^$\\])\$([^$\n]+?)\$/u, render: (tex) => renderInlineMathHtml(tex) },
-  { pattern: /(?:^|[^*])\*([^*\s][^*]*?)\*(?!\*)/u, render: (t) => `<em data-pl-md="*">${escapeHtmlText(t)}</em>` },
+  { pattern: /\*\*([^*\s][^*]*?)\*\*/u, marker: '**', render: (t) => `<strong data-pl-md="**">${escapeHtmlText(t)}</strong>` },
+  { pattern: /~~([^~\s][^~]*?)~~/u, marker: '~~', render: (t) => `<del data-pl-md="~~">${escapeHtmlText(t)}</del>` },
+  { pattern: /`([^`\n]+)`/u, marker: '`', render: (t) => `<code>${escapeHtmlText(t)}</code>` },
+  { pattern: /(?:^|[^$\\])\$([^$\n]+?)\$/u, marker: '$', render: (tex) => renderInlineMathHtml(restoreEscapeSentinels(tex)) },
+  { pattern: /(?:^|[^*])\*([^*\s][^*]*?)\*(?!\*)/u, marker: '*', render: (t) => `<em data-pl-md="*">${escapeHtmlText(t)}</em>` },
 ]
-
-const PURE_MD_SYNTAX_PATTERN = /^[\s\u00A0\u200B]*(?:#{1,3}|[-*>]|\d+\.|\*{1,2}|~~|`|\$)+[\s\u00A0\u200B]*$/u
-const LINE_PREFIX_EXTRACT_PATTERN = /^((?:#{1,3}|>|[-*]|\d+\.)[ \u00A0]+)/u
-
-export function unwrapElement(el: Element): void {
-  const parent = el.parentNode
-  if (parent === null) return
-  while (el.firstChild !== null) parent.insertBefore(el.firstChild, el)
-  parent.removeChild(el)
-}
-
-function hoistLineMarkdownPrefix(lineEl: HTMLElement): void {
-  const rawText = (lineEl.textContent ?? '').replace(/\u200B/gu, '')
-  const match = LINE_PREFIX_EXTRACT_PATTERN.exec(rawText)
-  if (match === null) return
-  const prefix = match[1] ?? ''
-  if (lineEl.firstChild instanceof Text && lineEl.firstChild.data.replace(/\u200B/gu, '').startsWith(prefix)) {
-    return
-  }
-
-  let remaining = prefix.length
-  const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
-  for (let cur = walker.nextNode(); cur !== null && remaining > 0; cur = walker.nextNode()) {
-    if (cur instanceof Text) {
-      const cleaned = cur.data.replace(/\u200B/gu, '')
-      if (cleaned.length <= remaining) {
-        remaining -= cleaned.length
-        cur.data = ''
-      } else {
-        cur.data = cleaned.slice(remaining)
-        remaining = 0
-      }
-    }
-  }
-
-  lineEl.querySelectorAll('a, font, span, b, strong, i, em, u, s, del, strike').forEach((el) => {
-    if ((el.textContent ?? '').replace(/\u200B/gu, '') === '' && el.querySelector('img, br') === null) {
-      el.remove()
-    }
-  })
-  lineEl.insertBefore(document.createTextNode(prefix.replace(/\u00A0/gu, ' ')), lineEl.firstChild)
-}
-
-/** 清理浏览器注入的默认计算样式 span、零宽字符，并剥离误挂在 Markdown 语法符（如 - / #）上的链接或样式 */
-export function cleanBrowserArtifacts(root: HTMLElement): void {
-  root.querySelectorAll('span[style]').forEach((span) => {
-    if (!(span instanceof HTMLElement)) return
-    if ((span.getAttribute('style') ?? '').includes('oklch')) {
-      span.style.removeProperty('color')
-      span.style.removeProperty('font-size')
-    }
-    if (span.style.backgroundColor.trim() === '' && span.style.color.trim() === '') {
-      unwrapElement(span)
-    }
-  })
-
-  root.querySelectorAll('a, font, span, b, strong, i, em, u, s, del, strike').forEach((el) => {
-    if (!el.classList.contains('pl-math') && PURE_MD_SYNTAX_PATTERN.test(el.textContent ?? '')) {
-      unwrapElement(el)
-    }
-  })
-
-  const lineDivs = Array.from(root.children).filter(
-    (child): child is HTMLElement => child instanceof HTMLElement && BLOCK_TAG_PATTERN.test(child.tagName),
-  )
-  if (lineDivs.length > 0) lineDivs.forEach(hoistLineMarkdownPrefix)
-  else hoistLineMarkdownPrefix(root)
-
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-  for (let cur = walker.nextNode(); cur !== null; cur = walker.nextNode()) {
-    if (cur instanceof Text && cur.data.includes('\u200B')) {
-      cur.data = cur.data.replace(/\u200B/gu, '')
-    }
-  }
-}
-
-function revertInlineMarkdownElements(root: HTMLElement): void {
-  root.querySelectorAll('.pl-math').forEach((mathEl) => {
-    const tex = mathEl.getAttribute('data-pl-math') ?? (mathEl.textContent ?? '')
-    mathEl.replaceWith(document.createTextNode(`$${tex}$`))
-  })
-  root.querySelectorAll('code').forEach((codeEl) => {
-    if (codeEl.closest('pre') === null) {
-      codeEl.replaceWith(document.createTextNode(`\`${codeEl.textContent ?? ''}\``))
-    }
-  })
-  root.querySelectorAll('[data-pl-md]').forEach((mdEl) => {
-    const marker = mdEl.getAttribute('data-pl-md') ?? ''
-    if (marker !== '**' && marker !== '*' && marker !== '~~') return
-    const parent = mdEl.parentNode
-    if (parent === null) return
-    parent.insertBefore(document.createTextNode(marker), mdEl)
-    while (mdEl.firstChild !== null) parent.insertBefore(mdEl.firstChild, mdEl)
-    parent.insertBefore(document.createTextNode(marker), mdEl)
-    parent.removeChild(mdEl)
-  })
-}
-
-function splitNodesAtBr(nodes: readonly Node[]): Node[][] {
-  const segments: Node[][] = [[]]
-  for (const node of nodes) {
-    if (node instanceof HTMLBRElement) segments.push([])
-    else segments[segments.length - 1]?.push(node.cloneNode(true))
-  }
-  if (segments.length > 1 && (segments[segments.length - 1]?.length ?? 0) === 0) segments.pop()
-  return segments
-}
-
-function serializeNodesSplittingBr(nodes: readonly Node[], firstLinePrefix: string, lines: string[]): void {
-  if (nodes.length === 1 && nodes[0] instanceof HTMLBRElement && firstLinePrefix === '') {
-    lines.push('')
-    return
-  }
-  const segments = splitNodesAtBr(nodes)
-  segments.forEach((segment, idx) => {
-    const temp = document.createElement('div')
-    for (const item of segment) temp.appendChild(item)
-    const html = `${idx === 0 ? firstLinePrefix : ''}${temp.innerHTML}`
-    if (html !== '' || segments.length > 1) lines.push(html)
-  })
-}
-
-function hasChildBlockElement(el: HTMLElement): boolean {
-  return Array.from(el.children).some((child) => BLOCK_TAG_PATTERN.test(child.tagName))
-}
-
-function collectEditableLines(container: Node, lines: string[]): void {
-  let inlineBuffer: Node[] = []
-  const flushBuffer = (): void => {
-    if (inlineBuffer.length === 0) return
-    serializeNodesSplittingBr(inlineBuffer, '', lines)
-    inlineBuffer = []
-  }
-
-  for (const child of Array.from(container.childNodes)) {
-    if (child instanceof HTMLElement && BLOCK_TAG_PATTERN.test(child.tagName)) {
-      flushBuffer()
-      const tag = child.tagName.toUpperCase()
-      const childNodes = Array.from(child.childNodes)
-      if (tag === 'PRE') {
-        lines.push('```', ...(child.textContent ?? '').split(/\r?\n/u).map(escapeHtmlText), '```')
-      } else if (/^H[1-6]$/u.test(tag)) {
-        serializeNodesSplittingBr(childNodes, `${'#'.repeat(Math.min(3, Math.max(1, Number(tag.slice(1)))))} `, lines)
-      } else if (tag === 'BLOCKQUOTE') {
-        serializeNodesSplittingBr(childNodes, '&gt; ', lines)
-      } else if (tag === 'UL') {
-        Array.from(child.children).forEach((li) => { serializeNodesSplittingBr(Array.from(li.childNodes), '- ', lines) })
-      } else if (tag === 'OL') {
-        Array.from(child.children).forEach((li, idx) => {
-          serializeNodesSplittingBr(Array.from(li.childNodes), `${idx + 1}. `, lines)
-        })
-      } else if (hasChildBlockElement(child)) {
-        collectEditableLines(child, lines)
-      } else {
-        serializeNodesSplittingBr(childNodes, '', lines)
-      }
-    } else if (!(child instanceof Text && child.data === '')) {
-      inlineBuffer.push(child.cloneNode(true))
-    }
-  }
-  flushBuffer()
-}
-
-/**
- * 将节点存储的已渲染 HTML 还原为编辑器内显示的「Markdown 源码 + 文本富文本样式」行结构。
- */
-export function decompileRichTextToEditableHtml(renderedHtml: string): string {
-  if (renderedHtml.trim() === '') return ''
-  const root = document.createElement('div')
-  root.innerHTML = renderedHtml
-  cleanBrowserArtifacts(root)
-  revertInlineMarkdownElements(root)
-
-  const lines: string[] = []
-  collectEditableLines(root, lines)
-  while (lines.length > 0 && lines[lines.length - 1]?.trim() === '') {
-    lines.pop()
-  }
-  if (lines.length === 0) return ''
-  return lines.map((line) => `<div>${line === '' ? '<br>' : line}</div>`).join('')
-}
 
 function splitNodesIntoFragments(nodes: readonly Node[], out: DocumentFragment[]): void {
   if (nodes.length === 1 && nodes[0] instanceof HTMLBRElement) {
@@ -238,27 +69,6 @@ function extractEditorLineFragments(container: Node, out: DocumentFragment[]): v
     }
   }
   flushInline()
-}
-
-function firstLeadingTextNode(root: Node): Text | null {
-  let cursor: Node | null = root.firstChild
-  while (cursor !== null) {
-    if (cursor instanceof Text) {
-      if (cursor.data === '') {
-        const next = cursor.nextSibling
-        cursor.remove()
-        cursor = next
-        continue
-      }
-      return cursor
-    }
-    if (cursor instanceof HTMLElement && !/^(?:BR|IMG|HR)$/iu.test(cursor.tagName)) {
-      cursor = cursor.firstChild
-    } else {
-      return null
-    }
-  }
-  return null
 }
 
 type LineBlockKind =
@@ -298,12 +108,13 @@ function consumeLineBlockPrefix(frag: DocumentFragment): LineBlockKind {
   return { kind: 'paragraph' }
 }
 
-function findEarliestInlineCompileMatch(text: string): {
+export function findEarliestInlineCompileMatch(text: string): {
   readonly startIndex: number
   readonly endIndex: number
   readonly replacementHtml: string
+  readonly marker: string
 } | null {
-  let earliest: { startIndex: number; endIndex: number; replacementHtml: string } | null = null
+  let earliest: { startIndex: number; endIndex: number; replacementHtml: string; marker: string } | null = null
   for (const rule of INLINE_COMPILE_RULES) {
     const match = rule.pattern.exec(text)
     if (match === null) continue
@@ -316,7 +127,7 @@ function findEarliestInlineCompileMatch(text: string): {
     const startIndex = match.index + (hasLeadingChar ? 1 : 0)
     const endIndex = match.index + full.length
     if (earliest === null || startIndex < earliest.startIndex) {
-      earliest = { startIndex, endIndex, replacementHtml: rule.render(inner) }
+      earliest = { startIndex, endIndex, replacementHtml: rule.render(inner), marker: rule.marker }
     }
   }
   return earliest
@@ -326,6 +137,7 @@ function compileFragmentInlineMarkdown(frag: DocumentFragment): string {
   const container = document.createElement('div')
   container.appendChild(frag)
   container.normalize()
+  neutralizeBackslashEscapes(container)
 
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
   const textNodes: Text[] = []
@@ -357,9 +169,11 @@ function compileFragmentInlineMarkdown(frag: DocumentFragment): string {
     }
   }
 
-  return container.innerHTML
-    .replace(/\*\*(?!\s)((?:(?!\*\*)[\s\S])+?)(?<!\s)\*\*/gu, '<strong data-pl-md="**">$1</strong>')
-    .replace(/~~(?!\s)((?:(?!~~)[\s\S])+?)(?<!\s)~~/gu, '<del data-pl-md="~~">$1</del>')
+  return restoreEscapeSentinelsInHtml(
+    container.innerHTML
+      .replace(/\*\*(?!\s)((?:(?!\*\*)[\s\S])+?)(?<!\s)\*\*/gu, '<strong data-pl-md="**">$1</strong>')
+      .replace(/~~(?!\s)((?:(?!~~)[\s\S])+?)(?<!\s)~~/gu, '<del data-pl-md="~~">$1</del>'),
+  )
 }
 
 function readFencedCodeBlock(

@@ -7,11 +7,9 @@ import { Button } from '@/shared/components/ui/button'
 import { useRichTextCommands } from '../hooks/useRichTextCommands'
 import type { RichTextCommands } from '../hooks/useRichTextCommands'
 import { extractImageFiles } from '../lib/inboxUpload'
-import {
-  compileMarkdownRichTextHtml,
-  decompileRichTextToEditableHtml,
-  unwrapElement,
-} from '../lib/markdownRichText'
+import { unwrapElement } from '../lib/markdownClean'
+import { decompileRichTextToEditableHtml } from '../lib/markdownDecompile'
+import { compileMarkdownRichTextHtml } from '../lib/markdownRichText'
 import { emitHtml, insertPlainText, placeCaretAtEnd } from '../lib/richText'
 import { RichTextToolbar } from './RichTextToolbar'
 
@@ -166,7 +164,7 @@ function RichTextInput({
       contentEditable
       tabIndex={0}
       spellCheck={false}
-      data-placeholder="输入 Markdown 源码（# 标题、- 列表、**加粗**、`代码`、$公式$），或选中文本设置富文本样式…"
+      data-placeholder="输入 Markdown 源码（# 标题、- 列表、**加粗**、`代码`、$公式$、\转义），或选中文本设置富文本样式…"
       className={RICH_TEXT_INPUT_CLASS}
       style={{ fontSize }}
       onCompositionStart={() => {
