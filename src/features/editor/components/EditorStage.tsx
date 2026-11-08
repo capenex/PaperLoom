@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 
 import type { NodeSize } from '@/shared/lib/nodeDefaults'
+import { visibleNodeIds } from '@/shared/lib/nodeTree'
 import type {
   CanvasId,
   DocumentDefaults,
@@ -110,7 +111,7 @@ function StageNodes(props: Readonly<StageNodesProps>) {
             dragging={dragging}
             anyDragging={anyDragging}
             dropTarget={drag.dropTargetId === node.id}
-            detachHint={dragging && drag.overBlank && node.parentId !== null}
+            detachHint={dragging && drag.overBlank && node.parentIds.length > 0}
             onSelect={props.onSelectNode}
             onEdit={props.onStartEditing}
             onFitNodeSize={props.onFitNodeSize}
@@ -148,6 +149,8 @@ export function EditorStage({ stageRef, ...rest }: Readonly<EditorStageProps>) {
     document.defaults,
     rest.expandedMediaNodeId,
   )
+  const visible = visibleNodeIds(document.nodes)
+  const visibleNodes = document.nodes.filter((node) => visible.has(node.id))
 
   return (
     <div
@@ -156,14 +159,14 @@ export function EditorStage({ stageRef, ...rest }: Readonly<EditorStageProps>) {
       style={{ width: viewLayout.width, height: viewLayout.height }}
     >
       <EditorConnections
-        nodes={document.nodes}
+        nodes={visibleNodes}
         layout={viewLayout}
         defaults={document.defaults}
         expandedMediaNodeId={rest.expandedMediaNodeId}
       />
       <StageNodes
         {...rest}
-        nodes={document.nodes}
+        nodes={visibleNodes}
         defaults={document.defaults}
         positions={viewLayout.positions}
         activeCanvasId={rest.activeCanvasId ?? null}

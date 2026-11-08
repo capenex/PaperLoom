@@ -20,7 +20,7 @@ interface NodeDragOptions {
   readonly layout: DocumentLayout
   readonly stageRef: RefObject<HTMLDivElement | null>
   readonly onMoveRoot: (nodeId: NodeId, anchor: Point) => void
-  readonly onReparentNode: (nodeId: NodeId, targetId: NodeId) => void
+  readonly onAddParent: (nodeId: NodeId, targetId: NodeId) => void
   readonly onDetachAsRoot: (nodeId: NodeId, anchor: Point) => void
 }
 
@@ -39,14 +39,14 @@ function createSession(
     startX: event.clientX,
     startY: event.clientY,
     zoom: measureWorldZoom(options.stageRef.current),
-    isRoot: node.parentId === null,
+    isRoot: node.parentIds.length === 0,
     baseAnchor: rawPositionOf(node, options.layout),
     basePositions: options.layout.positions,
     subtreeIds: collectSubtreeIds(options.document.nodes, nodeId),
   }
 }
 
-/** 落点提交：命中可挂载目标则改挂，落在空白处则脱离为根，其余情况只有根节点会移动锚点 */
+/** 落点提交：命中上一层目标则追加父节点，落在空白处则脱离为根，根节点自由移动锚点 */
 function commitDrag(
   session: DragSession,
   clientX: number,
@@ -56,7 +56,7 @@ function commitDrag(
   const hitId = cardIdAtPoint(clientX, clientY, session.subtreeIds)
   const probe = probeDrop(options.document, session, hitId)
   if (probe.targetId !== null) {
-    options.onReparentNode(session.nodeId, probe.targetId)
+    options.onAddParent(session.nodeId, probe.targetId)
     return
   }
 

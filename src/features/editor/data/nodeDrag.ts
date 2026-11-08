@@ -1,5 +1,5 @@
 import type { NodeId, PaperDocument } from '@/shared/types/paper'
-import { canReparent } from './document'
+import { canAddParent } from './document'
 import type { Point } from './layout'
 
 /** 位移超过该值（画布坐标）才算拖动，避免手抖误改结构 */
@@ -68,12 +68,12 @@ export function anchorAfter(session: DragSession, delta: Point): Point {
   return { x: session.baseAnchor.x + delta.x, y: session.baseAnchor.y + delta.y }
 }
 
-/** 命中的卡片能否作为挂载目标 */
+/** 命中的卡片能否作为追加父节点的目标（必须恰为上一层） */
 export function probeDrop(
   document: PaperDocument,
   session: DragSession,
   hitId: NodeId | null,
 ): DropProbe {
-  const allowed = hitId !== null && canReparent(document, session.nodeId, hitId)
+  const allowed = hitId !== null && canAddParent(document, session.nodeId, hitId)
   return { hitId, targetId: allowed ? hitId : null }
 }

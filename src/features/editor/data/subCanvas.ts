@@ -140,7 +140,7 @@ function createInitialSubCanvas(
   const rawNodes: readonly PaperNode[] = [
     {
       ...hostNode,
-      parentId: null,
+      parentIds: [],
       layout: {
         ...hostNode.layout,
         x: 0,
@@ -150,7 +150,7 @@ function createInitialSubCanvas(
     },
     {
       id: branchChildId,
-      parentId: hostNode.id,
+      parentIds: [hostNode.id],
       content: { kind: 'text', richText: '' },
       layout: { x: 0, y: 0, collapsed: false },
     },
@@ -158,7 +158,7 @@ function createInitialSubCanvas(
   const rootIds: readonly NodeId[] = [hostNode.id]
   const shift = stageBoundsShift(rawNodes, rootIds, defaults)
   const nodes = rawNodes.map((node) =>
-    node.parentId === null
+    node.parentIds.length === 0
       ? { ...node, layout: { ...node.layout, x: node.layout.x + shift.x, y: node.layout.y + shift.y } }
       : node,
   )
@@ -242,6 +242,6 @@ export function canDeleteNodeInCanvas(
     const sub = document.subCanvases?.[activeCanvasId]
     if (sub !== undefined && node.id === sub.hostNodeId) return false
   }
-  const isRoot = node.parentId === null
+  const isRoot = node.parentIds.length === 0
   return !isRoot || slice.rootIds.length > 1
 }

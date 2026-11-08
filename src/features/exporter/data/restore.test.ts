@@ -45,7 +45,7 @@ function createFixtureDocument(): PaperDocument {
     nodes: [
       {
         id: 'node-root',
-        parentId: null,
+        parentIds: [],
         content: { kind: 'title', title: '主线节点', subtitle: '双击进支线' },
         layout: { x: 200, y: 160, collapsed: false },
         events: [
@@ -66,7 +66,7 @@ function createFixtureDocument(): PaperDocument {
         nodes: [
           {
             id: 'node-root',
-            parentId: null,
+            parentIds: [],
             content: { kind: 'title', title: '主线节点', subtitle: '双击进支线' },
             layout: { x: 200, y: 160, collapsed: false },
             events: [
@@ -80,7 +80,7 @@ function createFixtureDocument(): PaperDocument {
           },
           {
             id: 'node-branch-child',
-            parentId: 'node-root',
+            parentIds: ['node-root'],
             content: { kind: 'text', richText: '<p>支线内容</p>' },
             layout: { x: 200, y: 320, collapsed: false },
           },
@@ -142,25 +142,25 @@ void test('rewriteDocumentPaths rewrites main canvas and subCanvases back to inb
     nodes: [
       {
         id: 'img-main',
-        parentId: null,
+        parentIds: [],
         content: { kind: 'image', src: './res/inbox/1.png', alt: '主图' },
         layout: { x: 0, y: 0, collapsed: false },
       },
       {
         id: 'img-media',
-        parentId: 'img-main',
+        parentIds: ['img-main'],
         content: { kind: 'image', src: './assets/media/image-1.png', alt: '媒体图' },
         layout: { x: 0, y: 200, collapsed: false },
       },
       {
         id: 'img-keep',
-        parentId: 'img-main',
+        parentIds: ['img-main'],
         content: { kind: 'image', src: './res/inbox/keep.png', alt: '未收录' },
         layout: { x: 0, y: 400, collapsed: false },
       },
       {
         id: 'text-main',
-        parentId: 'img-main',
+        parentIds: ['img-main'],
         content: {
           kind: 'text',
           richText:
@@ -177,13 +177,13 @@ void test('rewriteDocumentPaths rewrites main canvas and subCanvases back to inb
         nodes: [
           {
             id: 'sub-img',
-            parentId: null,
+            parentIds: [],
             content: { kind: 'image', src: './res/inbox/2.png', alt: '支线图' },
             layout: { x: 0, y: 0, collapsed: false },
           },
           {
             id: 'sub-text',
-            parentId: 'sub-img',
+            parentIds: ['sub-img'],
             content: {
               kind: 'text',
               richText:

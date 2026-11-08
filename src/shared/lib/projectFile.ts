@@ -19,6 +19,7 @@ import type {
   PaperNode,
   SubCanvas,
 } from '../types/paper'
+import { describeLevelProblem } from './nodeTree'
 import { PROJECT_FORMAT_VERSION } from '../types/project'
 import type { PaperLoomProject } from '../types/project'
 
@@ -113,18 +114,40 @@ function isOptionalEvents(value: unknown): value is readonly NodeEventBinding[] 
   return value === undefined || (Array.isArray(value) && value.every(isNodeEventBinding))
 }
 
-function isPaperNode(value: unknown): value is PaperNode {
+/** 旧格式节点：单父 parentId */
+interface LegacyPaperNode extends Omit<PaperNode, 'parentIds'> {
+  readonly parentId: NodeId | null
+}
+
+interface RawSubCanvas {
+  readonly id: CanvasId
+  readonly hostNodeId: NodeId
+  readonly nodes: readonly (PaperNode | LegacyPaperNode)[]
+  readonly rootIds: readonly NodeId[]
+}
+
+function isPaperNode(value: unknown): value is PaperNode | LegacyPaperNode {
   if (!isRecord(value)) return false
+  const parentsOk = Array.isArray(value.parentIds)
+    ? value.parentIds.every(isText)
+    : value.parentId === null || isText(value.parentId)
   return (
     isText(value.id) &&
-    (value.parentId === null || isText(value.parentId)) &&
+    parentsOk &&
     isNodeContent(value.content) &&
     isNodeLayout(value.layout) &&
     isOptionalEvents(value.events)
   )
 }
 
-function isSubCanvas(value: unknown): value is SubCanvas {
+/** 旧存档的单父 parentId 迁移为 parentIds 数组 */
+function normalizeNode(node: PaperNode | LegacyPaperNode): PaperNode {
+  if ('parentIds' in node) return node
+  const { parentId, ...rest } = node
+  return { ...rest, parentIds: parentId === null ? [] : [parentId] }
+}
+
+function isSubCanvas(value: unknown): value is RawSubCanvas {
   if (!isRecord(value)) return false
   return (
     isText(value.id) &&
@@ -138,7 +161,7 @@ function isSubCanvas(value: unknown): value is SubCanvas {
 
 function isOptionalSubCanvases(
   value: unknown,
-): value is Readonly<Record<CanvasId, SubCanvas>> | undefined {
+): value is Readonly<Record<CanvasId, RawSubCanvas>> | undefined {
   if (value === undefined) return true
   if (!isRecord(value)) return false
   return Object.entries(value).every(([key, item]) => isSubCanvas(item) && item.id === key)
@@ -172,66 +195,25 @@ function toDocument(raw: unknown): PaperDocument | null {
   if (!Array.isArray(nodes) || !nodes.every(isPaperNode)) return null
   if (!Array.isArray(rootIds) || !rootIds.every(isText)) return null
   if (!isOptionalSubCanvases(subCanvases)) return null
-  return subCanvases === undefined
-    ? { meta, defaults, nodes, rootIds }
-    : { meta, defaults, nodes, rootIds, subCanvases }
-}
-
-function hasParentCycle(nodes: readonly PaperNode[], startId: NodeId): boolean {
-  const byId = new Map<NodeId, PaperNode>()
-  for (const node of nodes) byId.set(node.id, node)
-
-  const seen = new Set<NodeId>([startId])
-  let currentId = startId
-  for (let steps = 0; steps < nodes.length; steps += 1) {
-    const parentId = byId.get(currentId)?.parentId ?? null
-    if (parentId === null) return false
-    if (seen.has(parentId)) return true
-    seen.add(parentId)
-    currentId = parentId
+  const normalizedNodes = nodes.map(normalizeNode)
+  if (subCanvases === undefined) {
+    return { meta, defaults, nodes: normalizedNodes, rootIds }
   }
-  return true
-}
-
-function describeTreeProblem(
-  nodes: readonly PaperNode[],
-  rootIds: readonly NodeId[],
-): string | null {
-  const ids = new Set<NodeId>()
-  for (const node of nodes) {
-    if (ids.has(node.id)) return `节点 ID 重复：${node.id}`
-    ids.add(node.id)
+  const normalizedSubs: Record<CanvasId, SubCanvas> = {}
+  for (const [key, sub] of Object.entries(subCanvases)) {
+    normalizedSubs[key] = { ...sub, nodes: sub.nodes.map(normalizeNode) }
   }
-
-  if (rootIds.length === 0) return '至少要有一个根节点'
-  const rootIdSet = new Set<NodeId>(rootIds)
-  for (const rootId of rootIds) {
-    if (!ids.has(rootId)) return `根节点不存在：${rootId}`
-  }
-
-  for (const node of nodes) {
-    if (rootIdSet.has(node.id) && node.parentId !== null) {
-      return `节点 ${node.id} 既是根节点又有父节点`
-    }
-    if (node.parentId !== null && !ids.has(node.parentId)) {
-      return `父节点不存在：${node.parentId}`
-    }
-  }
-
-  for (const node of nodes) {
-    if (hasParentCycle(nodes, node.id)) return `节点存在循环引用：${node.id}`
-  }
-  return null
+  return { meta, defaults, nodes: normalizedNodes, rootIds, subCanvases: normalizedSubs }
 }
 
 /** 校验主画布与所有支线子画布的节点引用关系 */
 function describeDocumentProblem(document: PaperDocument): string | null {
-  const mainProblem = describeTreeProblem(document.nodes, document.rootIds)
+  const mainProblem = describeLevelProblem(document.nodes, document.rootIds)
   if (mainProblem !== null) return mainProblem
   if (document.subCanvases === undefined) return null
 
   for (const sub of Object.values(document.subCanvases)) {
-    const subProblem = describeTreeProblem(sub.nodes, sub.rootIds)
+    const subProblem = describeLevelProblem(sub.nodes, sub.rootIds)
     if (subProblem !== null) return `支线画布 ${sub.id}：${subProblem}`
   }
   return null

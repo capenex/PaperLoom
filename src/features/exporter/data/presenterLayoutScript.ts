@@ -30,6 +30,7 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
   var rootIds = []
   var nodeById = {}
   var childrenOf = {}
+  var parentsOf = {}
   var positions = {}
   var width = MIN_STAGE_SIZE
   var height = MIN_STAGE_SIZE
@@ -42,53 +43,102 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     }
   }
 
-  // 单棵子树的本地布局：根节点落在原点，子节点向右展开，父节点取子节点的垂直中点
+  // 单棵子树独立排版：记忆化 DFS 让共享子节点只占一行；自底向上中点+行距，自顶向下对齐居中
   function layoutSubtree(rootId) {
     var columnWidths = []
-    var maxNodeHeight = 0
+    var rowHeights = []
+    var seen = {}
     function measure(node, depth) {
-      if (!node) return
+      if (!node || seen[node.id]) return
+      seen[node.id] = true
       var size = sizeOf(node)
       if (size.width > (columnWidths[depth] || 0)) columnWidths[depth] = size.width
-      if (size.height > maxNodeHeight) maxNodeHeight = size.height
+      var rh = Math.max(MIN_ROW_HEIGHT, size.height + ROW_GAP)
+      if (rh > (rowHeights[depth] || 0)) rowHeights[depth] = rh
       var children = childrenOf[node.id] || []
-      children.forEach(function (child) {
-        measure(child, depth + 1)
-      })
+      children.forEach(function (child) { measure(child, depth + 1) })
     }
     measure(nodeById[rootId], 0)
 
     var columnOffsets = [0]
-    for (var depth = 1; depth < columnWidths.length; depth += 1) {
-      var halfSpan = Math.round(((columnWidths[depth - 1] || 0) + (columnWidths[depth] || 0)) / 2)
-      columnOffsets[depth] = columnOffsets[depth - 1] + halfSpan + COLUMN_GAP
+    for (var d = 1; d < columnWidths.length; d += 1) {
+      var halfSpan = Math.round(((columnWidths[d - 1] || 0) + (columnWidths[d] || 0)) / 2)
+      columnOffsets[d] = columnOffsets[d - 1] + halfSpan + COLUMN_GAP
     }
-    var rowHeight = Math.max(MIN_ROW_HEIGHT, maxNodeHeight + ROW_GAP)
 
-    var raw = {}
-    var leafIndex = 0
-    function place(id, placeDepth) {
+    var yOf = {}
+    var depthOf = {}
+    var leafCounters = []
+    var byDepth = []
+    var maxDepth = 0
+    function visit(id, depth) {
+      if (yOf[id] !== undefined) return yOf[id]
+      depthOf[id] = depth
+      if (depth > maxDepth) maxDepth = depth
+      if (!byDepth[depth]) byDepth[depth] = []
+      byDepth[depth].push(id)
       var children = childrenOf[id] || []
       var y
       if (children.length === 0) {
-        y = leafIndex * rowHeight
-        leafIndex += 1
+        var counter = leafCounters[depth] || 0
+        leafCounters[depth] = counter + 1
+        y = counter * (rowHeights[depth] || MIN_ROW_HEIGHT)
       } else {
-        var ys = children.map(function (child) {
-          return place(child.id, placeDepth + 1)
-        })
+        var ys = children.map(function (child) { return visit(child.id, depth + 1) })
         y = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2
       }
-      raw[id] = { x: columnOffsets[placeDepth] || 0, y: y }
+      yOf[id] = y
       return y
     }
-    place(rootId, 0)
+    visit(rootId, 0)
 
-    var rootEntry = raw[rootId]
-    var rootY = rootEntry ? rootEntry.y : 0
+    for (var depth = maxDepth; depth >= 0; depth -= 1) {
+      var ids = byDepth[depth] || []
+      var rowHeight = rowHeights[depth] || MIN_ROW_HEIGHT
+      ids.forEach(function (id) {
+        var children = childrenOf[id] || []
+        if (children.length === 0) return
+        var ys = children.map(function (child) { return yOf[child.id] || 0 })
+        yOf[id] = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2
+      })
+      var previous = -Infinity
+      ids.forEach(function (id) {
+        var y = Math.max(yOf[id] || 0, previous + rowHeight)
+        yOf[id] = y
+        previous = y
+      })
+    }
+
+    function desiredOf(id) {
+      var ps = parentsOf[id] || []
+      if (ps.length === 0) return yOf[id] || 0
+      var sum = 0
+      ps.forEach(function (p) { sum += yOf[p] || 0 })
+      return sum / ps.length
+    }
+    for (var alignDepth = 1; alignDepth <= maxDepth; alignDepth += 1) {
+      var alignIds = byDepth[alignDepth] || []
+      var alignRow = rowHeights[alignDepth] || MIN_ROW_HEIGHT
+      var prev = -Infinity
+      var i = 0
+      while (i < alignIds.length) {
+        var desired = desiredOf(alignIds[i])
+        var j = i + 1
+        while (j < alignIds.length && desiredOf(alignIds[j]) === desired) j += 1
+        var count = j - i
+        var start = Math.max(desired - ((count - 1) * alignRow) / 2, prev + alignRow)
+        for (var k = i; k < j; k += 1) {
+          yOf[alignIds[k]] = start + (k - i) * alignRow
+          prev = yOf[alignIds[k]]
+        }
+        i = j
+      }
+    }
+
+    var rootY = yOf[rootId] || 0
     var local = {}
-    Object.keys(raw).forEach(function (id) {
-      local[id] = { x: raw[id].x, y: raw[id].y - rootY }
+    Object.keys(yOf).forEach(function (id) {
+      local[id] = { x: columnOffsets[depthOf[id] || 0] || 0, y: (yOf[id] || 0) - rootY }
     })
     return local
   }
@@ -113,11 +163,16 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
     rootIds = Array.isArray(sliceRootIds) ? sliceRootIds : []
     nodeById = {}
     childrenOf = {}
+    parentsOf = {}
     nodes.forEach(function (node) {
       nodeById[node.id] = node
-      if (node.parentId === null) return
-      if (!childrenOf[node.parentId]) childrenOf[node.parentId] = []
-      childrenOf[node.parentId].push(node)
+      var parentIds = Array.isArray(node.parentIds) ? node.parentIds : []
+      parentIds.forEach(function (parentId) {
+        if (!childrenOf[parentId]) childrenOf[parentId] = []
+        childrenOf[parentId].push(node)
+        if (!parentsOf[node.id]) parentsOf[node.id] = []
+        parentsOf[node.id].push(parentId)
+      })
     })
 
     var subtrees = []

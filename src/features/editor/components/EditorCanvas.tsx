@@ -42,7 +42,7 @@ interface EditorCanvasProps {
   readonly onBackgroundClick: () => void
   readonly onBackgroundContextMenu: () => void
   readonly onMoveRoot: (nodeId: NodeId, anchor: Point) => void
-  readonly onReparentNode: (nodeId: NodeId, targetId: NodeId) => void
+  readonly onAddParent: (nodeId: NodeId, targetId: NodeId) => void
   readonly onDetachAsRoot: (nodeId: NodeId, anchor: Point) => void
 }
 

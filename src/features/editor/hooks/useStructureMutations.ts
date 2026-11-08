@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
 import type { CanvasId, NodeId, PaperDocument } from '@/shared/types/paper'
-import { applyInCanvas, detachNodeAsRoot, moveRootAnchor, reparentNode } from '../data/document'
+import { addParentNode, applyInCanvas, detachNodeAsRoot, moveRootAnchor } from '../data/document'
 import type { Point } from '../data/layout'
 
 interface StructureMutationsOptions {
@@ -13,11 +13,11 @@ interface StructureMutationsOptions {
 
 export interface StructureMutations {
   readonly moveRoot: (nodeId: NodeId, anchor: Point) => void
-  readonly reparentNode: (nodeId: NodeId, targetId: NodeId) => void
+  readonly addParent: (nodeId: NodeId, targetId: NodeId) => void
   readonly detachAsRoot: (nodeId: NodeId, anchor: Point) => void
 }
 
-/** Alt 拖动落点确定的结构操作：移动根节点锚点、改挂父节点、脱离为新根 */
+/** Alt 拖动落点确定的结构操作：移动根节点锚点、追加父节点、脱离为新根 */
 export function useStructureMutations({
   activeCanvasId,
   setDocument,
@@ -33,10 +33,10 @@ export function useStructureMutations({
     [activeCanvasId, setDocument, setSelectedNodeId],
   )
 
-  const reparent = useCallback(
+  const addParent = useCallback(
     (nodeId: NodeId, targetId: NodeId) => {
       setDocument((current) =>
-        applyInCanvas(current, activeCanvasId, (slice) => reparentNode(slice, nodeId, targetId)),
+        applyInCanvas(current, activeCanvasId, (slice) => addParentNode(slice, nodeId, targetId)),
       )
       setSelectedNodeId(nodeId)
     },
@@ -53,5 +53,5 @@ export function useStructureMutations({
     [activeCanvasId, setDocument, setSelectedNodeId],
   )
 
-  return { moveRoot, reparentNode: reparent, detachAsRoot }
+  return { moveRoot, addParent, detachAsRoot }
 }

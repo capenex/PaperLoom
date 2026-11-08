@@ -9,14 +9,15 @@ import { DEFAULT_FONT_SIZE, EXPANDED_MEDIA_SCALE } from '@/shared/lib/nodeDefaul
 import {
   addChildNode,
   addImageNode,
+  addParentNode,
   addRootNode,
   addSiblingNode,
-  canReparent,
+  canAddParent,
   changeNodeKind,
   createInitialDocument,
   detachNodeAsRoot,
   removeNode,
-  reparentNode,
+  removeParentNode,
   updateFileNodeContent,
   updateImageNodeContent,
   updateNodeLayout,
@@ -46,12 +47,12 @@ void test('createInitialDocument creates root node, sample image child node, and
   const rootId = doc.rootIds[0]
   assert.ok(rootId !== undefined)
   assert.equal(doc.nodes[0]?.id, rootId)
-  assert.equal(doc.nodes[0]?.parentId, null)
-  assert.equal(doc.nodes[1]?.parentId, rootId)
+  assert.deepEqual(doc.nodes[0]?.parentIds, [])
+  assert.deepEqual(doc.nodes[1]?.parentIds, [rootId])
   assert.equal(doc.nodes[1]?.content.kind, 'image')
 })
 
-void test('addRootNode, addChildNode, addSiblingNode, reparentNode, and removeNode mutate tree immutably', () => {
+void test('addRootNode, addChildNode, addSiblingNode, addParentNode, and removeNode mutate tree immutably', () => {
   let doc = createInitialDocument()
   const rootId = doc.rootIds[0]
   assert.ok(rootId !== undefined)
@@ -66,16 +67,19 @@ void test('addRootNode, addChildNode, addSiblingNode, reparentNode, and removeNo
   assert.equal(doc.rootIds.length, 2)
   assert.equal(doc.nodes.length, 5)
 
-  assert.equal(canReparent(doc, 'child-text-2', 'root-2'), true)
-  doc = reparentNode(doc, 'child-text-2', 'root-2')
-  assert.equal(doc.nodes.find((n) => n.id === 'child-text-2')?.parentId, 'root-2')
-
+  assert.equal(canAddParent(doc, 'child-text-2', 'root-2'), false)
   doc = detachNodeAsRoot(doc, 'child-text-1', { x: 300, y: 400 })
   assert.equal(doc.rootIds.includes('child-text-1'), true)
 
   doc = removeNode(doc, 'root-2')
   assert.equal(doc.rootIds.includes('root-2'), false)
-  assert.equal(doc.nodes.some((n) => n.id === 'child-text-2'), false)
+  assert.deepEqual(doc.nodes.find((n) => n.id === 'child-text-2')?.parentIds, [rootId])
+
+  doc = addChildNode(doc, rootId, 'uncle')
+  doc = addChildNode(doc, 'child-text-2', 'grand')
+  assert.equal(canAddParent(doc, 'grand', 'uncle'), true)
+  doc = addParentNode(doc, 'grand', 'uncle')
+  assert.deepEqual(doc.nodes.find((n) => n.id === 'grand')?.parentIds, ['child-text-2', 'uncle'])
 })
 
 void test('updateTextNodeContent, changeNodeKind, updateImageNodeContent, and updateNodeLayout work', () => {
@@ -232,7 +236,7 @@ void test('inbox image timestamp naming and addImageNode create multimedia nodes
     { parentId: rootId },
   )
   const pastedNode = doc.nodes.find((n) => n.id === 'pasted-img-1')
-  assert.equal(pastedNode?.parentId, rootId)
+  assert.deepEqual(pastedNode?.parentIds, [rootId])
   assert.equal(pastedNode?.content.kind, 'image')
   if (pastedNode?.content.kind === 'image') {
     assert.equal(pastedNode.content.src, '/res/inbox/1762521600000.png')
@@ -312,11 +316,91 @@ void test('layoutDocument pushes wide child nodes and neighboring subtrees outwa
   assert.ok(child2LeftEdge - parentRightEdge >= 95.5)
 
   doc = addRootNode(doc, 'second-root')
-  doc = updateNodeLayout(doc, 'second-root', { x: rootPos.x, y: rootPos.y + 40, width: 208, height: 144 })
+  const rootAnchor = doc.nodes.find((n) => n.id === rootId)?.layout
+  assert.ok(rootAnchor)
+  doc = updateNodeLayout(doc, 'second-root', { x: rootAnchor.x, y: rootAnchor.y + 40, width: 208, height: 144 })
   const multiLayout = layoutDocument(doc.nodes, doc.rootIds, doc.defaults)
   const secondRootPos = multiLayout.positions.get('second-root')
   const updatedChild2Pos = multiLayout.positions.get('wide-child-2')
   assert.ok(secondRootPos && updatedChild2Pos)
   assert.ok(secondRootPos.y - 144 / 2 >= updatedChild2Pos.y + 144 / 2 + 48 - 1)
+})
+
+void test('multi-parent nodes survive single-parent deletion and cascade only when all parents die', () => {
+  let doc = createInitialDocument()
+  const rootId = doc.rootIds[0]
+  assert.ok(rootId !== undefined)
+  doc = addChildNode(doc, rootId, 'n1')
+  doc = addChildNode(doc, rootId, 'n2')
+  doc = addChildNode(doc, 'n1', 'n3')
+
+  assert.equal(canAddParent(doc, 'n3', 'n2'), true)
+  assert.equal(canAddParent(doc, 'n3', 'n1'), false)
+  assert.equal(canAddParent(doc, 'n2', 'n3'), false)
+  doc = addParentNode(doc, 'n3', 'n2')
+  assert.deepEqual(doc.nodes.find((n) => n.id === 'n3')?.parentIds, ['n1', 'n2'])
+
+  doc = removeNode(doc, 'n1')
+  assert.deepEqual(doc.nodes.find((n) => n.id === 'n3')?.parentIds, ['n2'])
+
+  doc = removeNode(doc, 'n2')
+  assert.equal(doc.nodes.some((n) => n.id === 'n3'), false)
+})
+
+void test('removeParentNode promotes to root when the last parent edge is removed', () => {
+  let doc = createInitialDocument()
+  const rootId = doc.rootIds[0]
+  assert.ok(rootId !== undefined)
+  doc = addChildNode(doc, rootId, 'a')
+  doc = addChildNode(doc, 'a', 'b')
+
+  doc = removeParentNode(doc, 'b', 'a')
+  assert.deepEqual(doc.nodes.find((n) => n.id === 'b')?.parentIds, [])
+  assert.equal(doc.rootIds.includes('b'), true)
+})
+
+void test('leveled layout places a shared child once in the next column of both parents', () => {
+  let doc = createInitialDocument()
+  const rootId = doc.rootIds[0]
+  assert.ok(rootId !== undefined)
+  doc = addChildNode(doc, rootId, 'n1')
+  doc = addChildNode(doc, rootId, 'n2')
+  doc = addChildNode(doc, 'n1', 'n3')
+  doc = addParentNode(doc, 'n3', 'n2')
+
+  const layout = layoutDocument(doc.nodes, doc.rootIds, doc.defaults)
+  assert.equal(layout.positions.size, doc.nodes.length)
+  const p1 = layout.positions.get('n1')
+  const p2 = layout.positions.get('n2')
+  const p3 = layout.positions.get('n3')
+  assert.ok(p1 && p2 && p3)
+  assert.equal(p1.x, p2.x)
+  assert.ok(p3.x > p1.x)
+  assert.ok(p2.y > p1.y)
+  assert.equal(p3.y, (p1.y + p2.y) / 2)
+})
+
+void test('each root tree lays out independently: chains stay aligned and shared children center', () => {
+  let doc = createInitialDocument()
+  const rootId = doc.rootIds[0]
+  assert.ok(rootId !== undefined)
+  doc = addChildNode(doc, rootId, 'n1')
+  doc = addChildNode(doc, rootId, 'n2')
+  doc = addChildNode(doc, 'n1', 'n3')
+  doc = addParentNode(doc, 'n3', 'n2')
+  doc = addRootNode(doc, 'log')
+  doc = addChildNode(doc, 'log', 'first')
+  doc = addChildNode(doc, 'first', 'second')
+
+  const layout = layoutDocument(doc.nodes, doc.rootIds, doc.defaults)
+  const n1 = layout.positions.get('n1')
+  const n2 = layout.positions.get('n2')
+  const n3 = layout.positions.get('n3')
+  const first = layout.positions.get('first')
+  const second = layout.positions.get('second')
+  assert.ok(n1 && n2 && n3 && first && second)
+  assert.equal(n3.y, (n1.y + n2.y) / 2)
+  assert.equal(second.y, first.y)
+  assert.equal(second.x - first.x, n1.x - (layout.positions.get(rootId)?.x ?? 0))
 })
 

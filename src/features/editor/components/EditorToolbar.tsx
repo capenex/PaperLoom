@@ -35,6 +35,8 @@ interface EditorToolbarProps {
   readonly onUpdateNodeEvents: (nodeId: NodeId, events: readonly NodeEventBinding[]) => void
   readonly onEnterSubCanvas: (nodeId: NodeId, canvasId: CanvasId) => void
   readonly onEditNodeText: (nodeId: NodeId) => void
+  readonly parents: readonly PaperNode[]
+  readonly onRemoveParent: (nodeId: NodeId, parentId: NodeId) => void
 }
 
 /** 编辑栏：选中节点时编辑该节点（含标题文字与事件绑定），未选中时进行文档级宏观操作 */
@@ -57,6 +59,8 @@ export function EditorToolbar({
   onUpdateNodeEvents,
   onEnterSubCanvas,
   onEditNodeText,
+  parents,
+  onRemoveParent,
 }: Readonly<EditorToolbarProps>) {
   if (selectedNode === undefined) {
     return (
@@ -86,6 +90,8 @@ export function EditorToolbar({
       onUpdateEvents={onUpdateNodeEvents}
       onEnterSubCanvas={onEnterSubCanvas}
       onEditNodeText={onEditNodeText}
+      parents={parents}
+      onRemoveParent={onRemoveParent}
     />
   )
 }

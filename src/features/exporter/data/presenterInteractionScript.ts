@@ -80,13 +80,14 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
       card.classList.toggle('node-expanded', id === expandedId)
       card.setAttribute('aria-pressed', selected ? 'true' : 'false')
     })
-    Object.keys(pathsById).forEach(function (id) {
-      var node = nodeById[id]
-      var parentNode = nodeById[node.parentId]
-      var source = activePositions[node.parentId]
-      var target = activePositions[id]
-      if (!parentNode || !source || !target) return
-      pathsById[id].setAttribute(
+    Object.keys(pathsById).forEach(function (key) {
+      var entry = pathsById[key]
+      var node = nodeById[entry.nodeId]
+      var parentNode = nodeById[entry.parentId]
+      var source = activePositions[entry.parentId]
+      var target = activePositions[entry.nodeId]
+      if (!node || !parentNode || !source || !target) return
+      entry.path.setAttribute(
         'd',
         connectionPathD(
           source,

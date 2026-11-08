@@ -51,6 +51,10 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
           onUpdateNodeEvents={editor.updateEvents}
           onEnterSubCanvas={editor.enterSubCanvas}
           onEditNodeText={editor.startEditing}
+          parents={editor.activeDocument.nodes.filter(
+            (node) => editor.selectedNode?.parentIds.includes(node.id) ?? false,
+          )}
+          onRemoveParent={editor.removeParent}
         />
       </div>
       <div className="w-48 shrink-0">
@@ -90,7 +94,7 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onCollapseDetail={editor.collapseDetail}
         onCollapseExpandedMedia={editor.collapseExpandedMedia}
         onMoveRoot={editor.moveRoot}
-        onReparentNode={editor.reparentNode}
+        onAddParent={editor.addParent}
         onDetachAsRoot={editor.detachAsRoot}
       />
     </main>

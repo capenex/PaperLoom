@@ -21,6 +21,7 @@ import {
   canDeleteNodeInCanvas,
   changeNodeKind,
   removeNode,
+  removeParentNode,
   updateFileNodeContent,
   updateImageNodeContent,
   updateNodeEventsInDocument,
@@ -42,6 +43,7 @@ export interface NodeMutations {
   readonly addSibling: (nodeId: NodeId) => void
   readonly addImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
   readonly deleteNode: (nodeId: NodeId) => void
+  readonly removeParent: (nodeId: NodeId, parentId: NodeId) => void
   readonly updateContent: (nodeId: NodeId, richText: string) => void
   readonly updateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly changeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
@@ -217,7 +219,15 @@ function useNodeAssetAndLayoutActions({
 export function useNodeMutations(options: Readonly<NodeMutationsOptions>): NodeMutations {
   const insertActions = useNodeInsertActions(options)
   const deleteNode = useNodeDeleteAction(options)
+  const removeParent = useCallback(
+    (nodeId: NodeId, parentId: NodeId) => {
+      options.setDocument((curr) =>
+        applyInCanvas(curr, options.activeCanvasId, (slice) => removeParentNode(slice, nodeId, parentId)),
+      )
+    },
+    [options],
+  )
   const textAndKindActions = useNodeTextAndKindActions(options)
   const assetAndLayoutActions = useNodeAssetAndLayoutActions(options)
-  return { ...insertActions, deleteNode, ...textAndKindActions, ...assetAndLayoutActions }
+  return { ...insertActions, deleteNode, removeParent, ...textAndKindActions, ...assetAndLayoutActions }
 }

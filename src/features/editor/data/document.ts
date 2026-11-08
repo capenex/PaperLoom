@@ -1,6 +1,7 @@
 import { createId } from '@/shared/lib/id'
 import { FALLBACK_DOCUMENT_DEFAULTS } from '@/shared/lib/nodeDefaults'
 import { defaultEventsForKind } from '@/shared/lib/nodeEvents'
+import { collectDescendantIds, collectRemovalIds, describeLevelProblem } from '@/shared/lib/nodeTree'
 import type { DocumentDefaults, ImageNodeContent, NodeId, NodeLayout, PaperDocument, PaperNode } from '@/shared/types/paper'
 import type { Point } from './layout'
 import { nextRootAnchor, stageBoundsShift } from './layout'
@@ -18,7 +19,7 @@ export interface AddImageNodeTarget {
 function createTextNode(id: NodeId, parentId: NodeId | null): PaperNode {
   return {
     id,
-    parentId,
+    parentIds: parentId === null ? [] : [parentId],
     content: { kind: 'text', richText: '' },
     layout: { x: 0, y: 0, collapsed: false },
   }
@@ -33,7 +34,7 @@ function createImageNode(
 ): PaperNode {
   return {
     id,
-    parentId,
+    parentIds: parentId === null ? [] : [parentId],
     content,
     events: defaultEventsForKind('image'),
     layout: { x: anchor.x, y: anchor.y, collapsed: false },
@@ -54,8 +55,8 @@ function ensureStageBounds(document: PaperDocument): PaperDocument {
   const shift = stageBoundsShift(document.nodes, document.rootIds, document.defaults)
   if (shift.x === 0 && shift.y === 0) return document
 
-  const nodes = document.nodes.map((node) =>
-    node.parentId === null
+  const nodes = document.nodes.map(node =>
+    node.parentIds.length === 0
       ? {
           ...node,
           layout: { ...node.layout, x: node.layout.x + shift.x, y: node.layout.y + shift.y },
@@ -99,7 +100,7 @@ export function addRootNode(document: PaperDocument, newNodeId: NodeId): PaperDo
   const anchor = nextRootAnchor(document.nodes, document.rootIds, document.defaults)
   const newRoot: PaperNode = {
     id: newNodeId,
-    parentId: null,
+    parentIds: [],
     content: { kind: 'text', richText: '' },
     layout: { x: anchor.x, y: anchor.y, collapsed: false },
   }
@@ -117,7 +118,7 @@ export function addChildNode(
   parentId: NodeId,
   newNodeId: NodeId,
 ): PaperDocument {
-  const exists = document.nodes.some((node) => node.id === parentId)
+  const exists = document.nodes.some(node => node.id === parentId)
   if (!exists) return document
 
   const nodes = [...document.nodes, createTextNode(newNodeId, parentId)]
@@ -132,7 +133,7 @@ export function addImageNode(
   target?: AddImageNodeTarget,
 ): PaperDocument {
   const parentId = target?.parentId ?? null
-  if (parentId !== null && document.nodes.some((node) => node.id === parentId)) {
+  if (parentId !== null && document.nodes.some(node => node.id === parentId)) {
     const child = createImageNode(newNodeId, parentId, content)
     return withStructure(document, [...document.nodes, child], document.rootIds)
   }
@@ -149,11 +150,12 @@ export function addSiblingNode(
   nodeId: NodeId,
   newNodeId: NodeId,
 ): PaperDocument {
-  const reference = document.nodes.find((node) => node.id === nodeId)
-  if (reference === undefined || reference.parentId === null) return document
+  const reference = document.nodes.find(node => node.id === nodeId)
+  const primaryParent = reference?.parentIds[0]
+  if (reference === undefined || primaryParent === undefined) return document
 
-  const newNode = createTextNode(newNodeId, reference.parentId)
-  const insertIndex = document.nodes.findIndex((node) => node.id === nodeId)
+  const newNode = createTextNode(newNodeId, primaryParent)
+  const insertIndex = document.nodes.findIndex(node => node.id === nodeId)
   const nodes = [
     ...document.nodes.slice(0, insertIndex + 1),
     newNode,
@@ -169,10 +171,10 @@ export function updateNodeLayout(
   nodeId: NodeId,
   patch: Partial<NodeLayout>,
 ): PaperDocument {
-  const exists = document.nodes.some((node) => node.id === nodeId)
+  const exists = document.nodes.some(node => node.id === nodeId)
   if (!exists) return document
 
-  const nodes = document.nodes.map((node) => {
+  const nodes = document.nodes.map(node => {
     if (node.id !== nodeId) return node
     return { ...node, layout: { ...node.layout, ...patch } }
   })
@@ -180,37 +182,33 @@ export function updateNodeLayout(
   return withStructure(document, nodes, document.rootIds)
 }
 
-/** 收集以 nodeId 为根的子树全部 ID（含自身） */
+/** 收集以 nodeId 为起点向下可达的全部 ID（含自身），拖动预览用 */
 export function collectSubtreeIds(
   nodes: readonly PaperNode[],
   nodeId: NodeId,
 ): ReadonlySet<NodeId> {
-  const ids = new Set<NodeId>([nodeId])
-  let grew = true
-  while (grew) {
-    grew = false
-    for (const node of nodes) {
-      if (node.parentId !== null && ids.has(node.parentId) && !ids.has(node.id)) {
-        ids.add(node.id)
-        grew = true
-      }
-    }
-  }
-  return ids
+  return collectDescendantIds(nodes, nodeId)
 }
 
-/** 删除节点及其整个子树；最后一个根节点不可删除 */
+/** 删除节点及其级联闭包（父列表被清空的节点递归随删）；最后一个根节点不可删除 */
 export function removeNode(document: PaperDocument, nodeId: NodeId): PaperDocument {
   const isRoot = document.rootIds.includes(nodeId)
   if (isRoot && document.rootIds.length <= 1) return document
-  const exists = document.nodes.some((node) => node.id === nodeId)
+  const exists = document.nodes.some(node => node.id === nodeId)
   if (!exists) return document
 
-  const removed = collectSubtreeIds(document.nodes, nodeId)
+  const removed = collectRemovalIds(document.nodes, nodeId)
+  const nodes = document.nodes
+    .filter(node => !removed.has(node.id))
+    .map(node =>
+      node.parentIds.some(id => removed.has(id))
+        ? { ...node, parentIds: node.parentIds.filter(id => !removed.has(id)) }
+        : node,
+    )
   return withStructure(
     document,
-    document.nodes.filter((node) => !removed.has(node.id)),
-    isRoot ? document.rootIds.filter((id) => !removed.has(id)) : document.rootIds,
+    nodes,
+    isRoot ? document.rootIds.filter(id => !removed.has(id)) : document.rootIds,
   )
 }
 
@@ -226,44 +224,69 @@ export function updateDocumentDefaults(
   })
 }
 
-/** 移动根节点锚点；子节点位置由布局算法相对锚点重算，因此相对关系保持不变 */
+/** 移动根节点锚点；全局层列布局下横坐标由列决定，锚点主要记录纵向意图 */
 export function moveRootAnchor(
   document: PaperDocument,
   nodeId: NodeId,
   anchor: Point,
 ): PaperDocument {
-  const target = document.nodes.find((node) => node.id === nodeId)
-  if (target === undefined || target.parentId !== null) return document
+  const target = document.nodes.find(node => node.id === nodeId)
+  if (target === undefined || target.parentIds.length > 0) return document
 
   return updateNodeLayout(document, nodeId, { x: anchor.x, y: anchor.y })
 }
 
-/** 能否把 nodeId 挂到 targetId 之下：不能挂到自己、自己的后代，或已在该父节点下 */
-export function canReparent(document: PaperDocument, nodeId: NodeId, targetId: NodeId): boolean {
+/** 能否追加父节点：不重复、不自父、同一根树内，且追加后整份文档仍满足「父同层且上一层」不变量 */
+export function canAddParent(document: PaperDocument, nodeId: NodeId, targetId: NodeId): boolean {
   if (nodeId === targetId) return false
-
-  const node = document.nodes.find((item) => item.id === nodeId)
-  const target = document.nodes.find((item) => item.id === targetId)
+  const node = document.nodes.find(item => item.id === nodeId)
+  const target = document.nodes.find(item => item.id === targetId)
   if (node === undefined || target === undefined) return false
-  if (node.parentId === targetId) return false
+  if (node.parentIds.includes(targetId)) return false
 
-  return !collectSubtreeIds(document.nodes, nodeId).has(targetId)
+  const nodes = document.nodes.map(item =>
+    item.id === nodeId ? { ...item, parentIds: [...item.parentIds, targetId] } : item,
+  )
+  const rootIds =
+    node.parentIds.length === 0 ? document.rootIds.filter(id => id !== nodeId) : document.rootIds
+  return describeLevelProblem(nodes, rootIds) === null
 }
 
-/** 把节点改挂到新的父节点下；若它原本是根节点，同时从根节点列表中移除 */
-export function reparentNode(
+/** 追加一个父节点（多父）；若它原本是根节点，同时从根节点列表中移除 */
+export function addParentNode(
   document: PaperDocument,
   nodeId: NodeId,
   targetId: NodeId,
 ): PaperDocument {
-  if (!canReparent(document, nodeId, targetId)) return document
+  if (!canAddParent(document, nodeId, targetId)) return document
 
-  const node = document.nodes.find((item) => item.id === nodeId)
-  const nodes = document.nodes.map((item) =>
-    item.id === nodeId ? { ...item, parentId: targetId } : item,
+  const node = document.nodes.find(item => item.id === nodeId)
+  const nodes = document.nodes.map(item =>
+    item.id === nodeId ? { ...item, parentIds: [...item.parentIds, targetId] } : item,
   )
   const rootIds =
-    node?.parentId === null ? document.rootIds.filter((id) => id !== nodeId) : document.rootIds
+    node !== undefined && node.parentIds.length === 0
+      ? document.rootIds.filter(id => id !== nodeId)
+      : document.rootIds
+
+  return withStructure(document, nodes, rootIds)
+}
+
+/** 移除一个父节点；删到空父列表时节点升为根节点；破坏分层不变量时拒绝 */
+export function removeParentNode(
+  document: PaperDocument,
+  nodeId: NodeId,
+  parentId: NodeId,
+): PaperDocument {
+  const node = document.nodes.find(item => item.id === nodeId)
+  if (node === undefined || !node.parentIds.includes(parentId)) return document
+
+  const parentIds = node.parentIds.filter(id => id !== parentId)
+  const nodes = document.nodes.map(item =>
+    item.id === nodeId ? { ...item, parentIds } : item,
+  )
+  const rootIds = parentIds.length === 0 ? [...document.rootIds, nodeId] : document.rootIds
+  if (describeLevelProblem(nodes, rootIds) !== null) return document
 
   return withStructure(document, nodes, rootIds)
 }
@@ -274,15 +297,17 @@ export function detachNodeAsRoot(
   nodeId: NodeId,
   anchor: Point,
 ): PaperDocument {
-  const node = document.nodes.find((item) => item.id === nodeId)
+  const node = document.nodes.find(item => item.id === nodeId)
   if (node === undefined) return document
-  if (node.parentId === null) return moveRootAnchor(document, nodeId, anchor)
+  if (node.parentIds.length === 0) return moveRootAnchor(document, nodeId, anchor)
 
-  const nodes = document.nodes.map((item) =>
+  const nodes = document.nodes.map(item =>
     item.id === nodeId
-      ? { ...item, parentId: null, layout: { ...item.layout, x: anchor.x, y: anchor.y } }
+      ? { ...item, parentIds: [], layout: { ...item.layout, x: anchor.x, y: anchor.y } }
       : item,
   )
+  const rootIds = [...document.rootIds, nodeId]
+  if (describeLevelProblem(nodes, rootIds) !== null) return document
 
-  return withStructure(document, nodes, [...document.rootIds, nodeId])
+  return withStructure(document, nodes, rootIds)
 }

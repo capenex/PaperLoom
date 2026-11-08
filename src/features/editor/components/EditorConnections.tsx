@@ -11,13 +11,13 @@ interface EditorConnectionsProps {
 
 function renderConnectionEdge(
   node: PaperNode,
+  parentId: NodeId,
   positions: DocumentLayout['positions'],
   widths: ReadonlyMap<NodeId, number>,
 ) {
-  if (node.parentId === null) return null
-  const source = positions.get(node.parentId)
+  const source = positions.get(parentId)
   const target = positions.get(node.id)
-  const parentWidth = widths.get(node.parentId)
+  const parentWidth = widths.get(parentId)
   const childWidth = widths.get(node.id)
   if (
     source === undefined ||
@@ -34,7 +34,7 @@ function renderConnectionEdge(
   const path = `M ${startX} ${source.y} C ${controlX} ${source.y}, ${controlX} ${target.y}, ${endX} ${target.y}`
 
   return (
-    <g key={node.id}>
+    <g key={`${node.id}:${parentId}`}>
       <path
         d={path}
         fill="none"
@@ -56,10 +56,12 @@ export function EditorConnections({
   expandedMediaNodeId = null,
 }: Readonly<EditorConnectionsProps>) {
   const widths = new Map<NodeId, number>()
+  const present = new Set<NodeId>()
   for (const node of nodes) {
     const baseWidth = resolveNodeSize(node.layout, defaults).width
     const isExpandedImage = node.id === expandedMediaNodeId && node.content.kind === 'image'
     widths.set(node.id, isExpandedImage ? baseWidth * EXPANDED_MEDIA_SCALE : baseWidth)
+    present.add(node.id)
   }
 
   return (
@@ -68,7 +70,11 @@ export function EditorConnections({
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       aria-hidden="true"
     >
-      {nodes.map((node) => renderConnectionEdge(node, layout.positions, widths))}
+      {nodes.flatMap((node) =>
+        node.parentIds
+          .filter((parentId) => present.has(parentId))
+          .map((parentId) => renderConnectionEdge(node, parentId, layout.positions, widths)),
+      )}
     </svg>
   )
 }

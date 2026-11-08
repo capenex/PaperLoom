@@ -22,7 +22,7 @@ void test('exporter serializes subCanvases and node events and presenter script 
     nodes: [
       {
         id: 'node-root',
-        parentId: null,
+        parentIds: [],
         content: { kind: 'title', title: '主线节点', subtitle: '双击进支线' },
         layout: { x: 200, y: 160, collapsed: false },
         events: [
@@ -43,7 +43,7 @@ void test('exporter serializes subCanvases and node events and presenter script 
         nodes: [
           {
             id: 'node-root',
-            parentId: null,
+            parentIds: [],
             content: { kind: 'title', title: '主线节点', subtitle: '双击进支线' },
             layout: { x: 200, y: 160, collapsed: false },
             events: [
@@ -57,7 +57,7 @@ void test('exporter serializes subCanvases and node events and presenter script 
           },
           {
             id: 'node-branch-child',
-            parentId: 'node-root',
+            parentIds: ['node-root'],
             content: { kind: 'file', fileName: 'notes.md', format: 'markdown', text: '# 支线实验记录' },
             layout: { x: 0, y: 0, collapsed: false },
           },

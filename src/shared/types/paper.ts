@@ -154,7 +154,8 @@ export interface NodeLayout {
 /** 演示节点 */
 export interface PaperNode {
   readonly id: NodeId
-  readonly parentId: NodeId | null
+  /** 父节点列表（分层 DAG）：空数组=根节点；首位为主父节点；所有父必须同层且为上一层 */
+  readonly parentIds: readonly NodeId[]
   readonly content: NodeContent
   readonly layout: NodeLayout
   /** 绑定在该节点上的交互事件列表；未设置时按节点类型使用默认事件 */
@@ -231,4 +232,5 @@ export type EditOperation =
   | { readonly type: 'remove-node'; readonly nodeId: NodeId }
   | { readonly type: 'update-content'; readonly nodeId: NodeId; readonly content: NodeContent }
   | { readonly type: 'update-layout'; readonly nodeId: NodeId; readonly layout: Partial<NodeLayout> }
-  | { readonly type: 'move-node'; readonly nodeId: NodeId; readonly newParentId: NodeId }
+  | { readonly type: 'add-parent'; readonly nodeId: NodeId; readonly parentId: NodeId }
+  | { readonly type: 'remove-parent'; readonly nodeId: NodeId; readonly parentId: NodeId }

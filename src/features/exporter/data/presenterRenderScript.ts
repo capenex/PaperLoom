@@ -99,22 +99,24 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     svg.setAttribute('aria-hidden', 'true')
 
     nodes.forEach(function (node) {
-      if (node.parentId === null) return
-      var parentNode = nodeById[node.parentId]
-      var source = positions[node.parentId]
-      var target = positions[node.id]
-      if (!parentNode || !source || !target) return
-      var path = document.createElementNS(svgNS, 'path')
-      path.setAttribute(
-        'd',
-        connectionPathD(source, target, sizeOf(parentNode).width, sizeOf(node).width),
-      )
-      path.setAttribute('fill', 'none')
-      path.setAttribute('stroke', '#7c5cbf')
-      path.setAttribute('stroke-width', '2')
-      path.setAttribute('opacity', '0.45')
-      pathsById[node.id] = path
-      svg.appendChild(path)
+      var parentIds = Array.isArray(node.parentIds) ? node.parentIds : []
+      parentIds.forEach(function (parentId) {
+        var parentNode = nodeById[parentId]
+        var source = positions[parentId]
+        var target = positions[node.id]
+        if (!parentNode || !source || !target) return
+        var path = document.createElementNS(svgNS, 'path')
+        path.setAttribute(
+          'd',
+          connectionPathD(source, target, sizeOf(parentNode).width, sizeOf(node).width),
+        )
+        path.setAttribute('fill', 'none')
+        path.setAttribute('stroke', '#7c5cbf')
+        path.setAttribute('stroke-width', '2')
+        path.setAttribute('opacity', '0.45')
+        pathsById[node.id + ':' + parentId] = { path: path, nodeId: node.id, parentId: parentId }
+        svg.appendChild(path)
+      })
     })
     stage.appendChild(svg)
 
