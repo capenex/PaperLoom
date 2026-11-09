@@ -31,8 +31,8 @@ export function ProjectPackageControls({
 
   function handleFolderChange(event: ChangeEvent<HTMLInputElement>): void {
     const files = event.target.files
-    event.target.value = ''
     if (files !== null && files.length > 0) restoreFromFolder(files)
+    event.target.value = ''
   }
 
   function handleZipChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -76,6 +76,7 @@ export function ProjectPackageControls({
       </div>
       <input
         ref={(element) => {
+          folderInputRef.current = element
           if (element !== null) element.setAttribute('webkitdirectory', '')
         }}
         type="file"

@@ -1,51 +1,70 @@
-import { Check, Download, Loader2, TriangleAlert } from 'lucide-react'
+import { Check, Download, FileArchive, Loader2, TriangleAlert } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
 import type { PaperDocument } from '@/shared/types/paper'
 import { useExport } from '../hooks/useExport'
 import type { ExportStatus } from '../hooks/useExport'
 
-function statusLabel(status: ExportStatus): string {
-  if (status === 'exporting') return '正在导出'
-  if (status === 'success') return '已导出'
-  if (status === 'error') return '重试导出'
-  return '导出到文件夹'
-}
-
-function StatusIcon({ status }: Readonly<{ status: ExportStatus }>) {
+function StatusIcon({ status, idle: Idle }: Readonly<{ status: ExportStatus; idle: LucideIcon }>) {
   if (status === 'exporting') return <Loader2 className="animate-spin" aria-hidden="true" />
   if (status === 'success') return <Check aria-hidden="true" />
   if (status === 'error') return <TriangleAlert aria-hidden="true" />
-  return <Download aria-hidden="true" />
+  return <Idle aria-hidden="true" />
+}
+
+function ExportHint({ status, message }: Readonly<{ status: ExportStatus; message: string }>) {
+  if (status === 'error' && message !== '') {
+    return (
+      <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600">
+        {message}
+      </p>
+    )
+  }
+  if (status === 'cancelled') {
+    return (
+      <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+        已取消：未选定文件夹或未允许写入（系统文件夹会被浏览器拦截），可换个文件夹或改用下载 zip
+      </p>
+    )
+  }
+  return null
 }
 
 export function ExportButton({ document }: Readonly<{ document: PaperDocument }>) {
-  const { status, message, run } = useExport()
+  const { status, target, message, run } = useExport()
+  const busy = status === 'exporting'
 
   return (
     <div className="flex flex-col gap-2">
-      <Button
-        size="sm"
-        className="w-full"
-        disabled={status === 'exporting'}
-        title={message}
-        onClick={() => {
-          run(document)
-        }}
-      >
-        <StatusIcon status={status} />
-        {statusLabel(status)}
-      </Button>
-      {status === 'error' && message !== '' && (
-        <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600">
-          {message}
-        </p>
-      )}
-      {status === 'success' && (
-        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-          文件夹内双击 index.html 即可离线展示
-        </p>
-      )}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="flex-1"
+          disabled={busy}
+          title="选择一个文件夹（如 U 盘）写入离线演示包，双击其中的 index.html 即可展示"
+          onClick={() => {
+            run(document, 'folder')
+          }}
+        >
+          <StatusIcon status={target === 'folder' ? status : 'idle'} idle={Download} />
+          导出文件夹
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="flex-1"
+          disabled={busy}
+          title="打包成 .zip 下载，不需要文件夹授权；解压后双击 index.html 即可展示"
+          onClick={() => {
+            run(document, 'zip')
+          }}
+        >
+          <StatusIcon status={target === 'zip' ? status : 'idle'} idle={FileArchive} />
+          下载 zip
+        </Button>
+      </div>
+      <ExportHint status={status} message={message} />
     </div>
   )
 }

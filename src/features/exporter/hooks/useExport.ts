@@ -2,24 +2,30 @@ import { useCallback, useState } from 'react'
 
 import type { PaperDocument } from '@/shared/types/paper'
 import { writeExportToDirectory } from '../data/writeDirectory'
+import { downloadExportZip } from '../data/writeZip'
 
-export type ExportStatus = 'idle' | 'exporting' | 'success' | 'error'
+export type ExportStatus = 'idle' | 'exporting' | 'success' | 'cancelled' | 'error'
+export type ExportTarget = 'folder' | 'zip'
 
 export function useExport() {
   const [status, setStatus] = useState<ExportStatus>('idle')
+  const [target, setTarget] = useState<ExportTarget>('folder')
   const [message, setMessage] = useState('')
 
-  const run = useCallback((document: PaperDocument) => {
+  const run = useCallback((document: PaperDocument, nextTarget: ExportTarget) => {
     setStatus('exporting')
+    setTarget(nextTarget)
     setMessage('')
 
-    writeExportToDirectory(document)
+    const task =
+      nextTarget === 'folder' ? writeExportToDirectory(document) : downloadExportZip(document)
+    task
       .then(() => {
         setStatus('success')
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') {
-          setStatus('idle')
+          setStatus('cancelled')
           return
         }
         setStatus('error')
@@ -27,5 +33,5 @@ export function useExport() {
       })
   }, [])
 
-  return { status, message, run }
+  return { status, target, message, run }
 }
