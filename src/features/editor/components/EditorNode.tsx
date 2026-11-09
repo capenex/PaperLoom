@@ -85,6 +85,10 @@ function cardClassName(
   )
 }
 
+/** 隐藏节点只淡化底色与内容，选中框与落点高亮保持原样，便于找回 */
+const HIDDEN_CARD_CLASS =
+  'border-dashed border-slate-300/50 bg-white/25 shadow-none *:opacity-25 hover:shadow-none'
+
 /** Alt 拖动时的附加样式：被拖动的卡片半透明，可作为落点的卡片高亮，空白落点提示将脱离为根 */
 function dragClassName(dragging: boolean, dropTarget: boolean, detachHint: boolean): string {
   if (dragging) {
@@ -242,6 +246,8 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
   const activeHostNodeId = props.activeHostNodeId ?? null
   const isHostRoot = Boolean(props.isHostRoot)
   const hasSubCanvas = findBoundSubCanvasId(node, activeCanvasId) !== null
+  const hidden = node.isHidden === true
+  const hiddenSuffix = hidden ? '（已隐藏）' : ''
   const handlers = cardHandlers({
     node,
     defaults,
@@ -264,8 +270,8 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={nodeAriaLabel(node, hasSubCanvas, isHostRoot)}
-      title={nodeTitle(node, hasSubCanvas, isHostRoot)}
+      aria-label={nodeAriaLabel(node, hasSubCanvas, isHostRoot) + hiddenSuffix}
+      title={hiddenSuffix + nodeTitle(node, hasSubCanvas, isHostRoot)}
       data-node-id={node.id}
       className={cn(
         cardClassName(
@@ -275,6 +281,7 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
           flushPadding,
           Boolean(props.anyDragging),
         ),
+        hidden && HIDDEN_CARD_CLASS,
         dragClassName(dragging, dropTarget, detachHint),
       )}
       style={nodeStyle(size.width, size.height, position, imageExpanded)}

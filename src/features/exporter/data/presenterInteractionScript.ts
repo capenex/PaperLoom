@@ -97,6 +97,10 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
         ),
       )
     })
+    Object.keys(bridgesById).forEach(function (id) {
+      var bridgeNode = nodeById[id]
+      if (bridgeNode) placeBridge(bridgesById[id], bridgeNode, activePositions[id])
+    })
   }
 
   function closeDetail() {

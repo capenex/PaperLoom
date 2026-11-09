@@ -160,6 +160,8 @@ export interface PaperNode {
   readonly layout: NodeLayout
   /** 绑定在该节点上的交互事件列表；未设置时按节点类型使用默认事件 */
   readonly events?: readonly NodeEventBinding[]
+  /** 隐藏节点：照常占位与排版、连线横穿而过，可充当跨层中继；编辑器淡显，演示包内不可见。缺省为可见 */
+  readonly isHidden?: boolean
 }
 
 /** 独立于主画布的支线子画布（宿主节点同时存在于上级画布与该子画布中） */

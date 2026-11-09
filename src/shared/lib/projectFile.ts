@@ -136,7 +136,8 @@ function isPaperNode(value: unknown): value is PaperNode | LegacyPaperNode {
     parentsOk &&
     isNodeContent(value.content) &&
     isNodeLayout(value.layout) &&
-    isOptionalEvents(value.events)
+    isOptionalEvents(value.events) &&
+    (value.isHidden === undefined || typeof value.isHidden === 'boolean')
   )
 }
 

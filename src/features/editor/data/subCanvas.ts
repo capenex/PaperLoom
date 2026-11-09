@@ -17,6 +17,7 @@ import type {
   SubCanvas,
 } from '@/shared/types/paper'
 import { stageBoundsShift } from './layout'
+import { withHiddenFlag } from './nodeVisibility'
 
 export interface BreadcrumbItem {
   readonly canvasId: CanvasId | null
@@ -139,7 +140,7 @@ function createInitialSubCanvas(
   const branchChildId = createId()
   const rawNodes: readonly PaperNode[] = [
     {
-      ...hostNode,
+      ...withHiddenFlag(hostNode, false),
       parentIds: [],
       layout: {
         ...hostNode.layout,

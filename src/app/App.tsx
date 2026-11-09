@@ -55,6 +55,7 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
             (node) => editor.selectedNode?.parentIds.includes(node.id) ?? false,
           )}
           onRemoveParent={editor.removeParent}
+          onSetNodeHidden={editor.setHidden}
           pending={editor.pending}
           onArmStructure={() => {
             editor.armStructure(editor.selectedNode?.id ?? null)

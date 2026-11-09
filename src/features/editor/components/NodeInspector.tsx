@@ -39,6 +39,7 @@ interface NodeInspectorProps {
   readonly onEditNodeText: (nodeId: NodeId) => void
   readonly parents: readonly PaperNode[]
   readonly onRemoveParent: (nodeId: NodeId, parentId: NodeId) => void
+  readonly onSetHidden: (nodeId: NodeId, hidden: boolean) => void
 }
 
 function parentLabel(parent: PaperNode): string {
@@ -140,11 +141,15 @@ export function NodeInspector(props: Readonly<NodeInspectorProps>) {
       <NodeActions
         isRoot={isRoot}
         canDelete={canDelete}
+        hidden={node.isHidden === true}
         onAddChild={() => {
           props.onAddChild(node.id)
         }}
         onAddSibling={() => {
           props.onAddSibling(node.id)
+        }}
+        onToggleHidden={() => {
+          props.onSetHidden(node.id, node.isHidden !== true)
         }}
         onDelete={() => {
           props.onDelete(node.id)

@@ -40,6 +40,7 @@ interface EditorToolbarProps {
   readonly onEditNodeText: (nodeId: NodeId) => void
   readonly parents: readonly PaperNode[]
   readonly onRemoveParent: (nodeId: NodeId, parentId: NodeId) => void
+  readonly onSetNodeHidden: (nodeId: NodeId, hidden: boolean) => void
   readonly pending: PendingNodeAction | null
   readonly onArmStructure: () => void
   readonly onArmFit: () => void
@@ -103,6 +104,7 @@ export function EditorToolbar({
   onEditNodeText,
   parents,
   onRemoveParent,
+  onSetNodeHidden,
   pending,
   onArmStructure,
   onArmFit,
@@ -150,6 +152,7 @@ export function EditorToolbar({
       onEditNodeText={onEditNodeText}
         parents={parents}
         onRemoveParent={onRemoveParent}
+        onSetHidden={onSetNodeHidden}
       />
     </div>
   )

@@ -29,6 +29,7 @@ import {
   updateTextNodeContent,
   updateTitleNodeContent,
 } from '../data/document'
+import { setNodeHidden } from '../data/nodeVisibility'
 
 interface NodeMutationsOptions {
   readonly activeCanvasId: CanvasId | null
@@ -56,6 +57,7 @@ export interface NodeMutations {
   ) => void
   readonly updateLayout: (nodeId: NodeId, patch: Partial<NodeLayout>) => void
   readonly updateEvents: (nodeId: NodeId, events: readonly NodeEventBinding[]) => void
+  readonly setHidden: (nodeId: NodeId, hidden: boolean) => void
 }
 
 function useNodeInsertActions({
@@ -212,7 +214,15 @@ function useNodeAssetAndLayoutActions({
     },
     [activeCanvasId, setDocument],
   )
-  return { updateImage, updateFile, updateLayout, updateEvents }
+  const setHidden = useCallback(
+    (nodeId: NodeId, hidden: boolean) => {
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) => setNodeHidden(slice, nodeId, hidden)),
+      )
+    },
+    [activeCanvasId, setDocument],
+  )
+  return { updateImage, updateFile, updateLayout, updateEvents, setHidden }
 }
 
 /** 文档结构与字段编辑操作（自动作用于当前激活的主画布或支线画布，并同步同源节点） */

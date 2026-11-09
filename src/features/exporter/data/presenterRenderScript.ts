@@ -19,8 +19,23 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
 
   var svgNS = 'http://www.w3.org/2000/svg'
   var pathsById = {}
+  var bridgesById = {}
   var cardsById = {}
   var bindCardInteractions = null
+
+  // 隐藏节点照常占位但不出卡片；进出线都在时用一段横线把两端接成一根
+  function isHiddenNode(node) {
+    return node.isHidden === true
+  }
+
+  function placeBridge(line, node, center) {
+    if (!center) return
+    var halfWidth = sizeOf(node).width / 2
+    line.setAttribute('x1', String(center.x - halfWidth))
+    line.setAttribute('x2', String(center.x + halfWidth))
+    line.setAttribute('y1', String(center.y))
+    line.setAttribute('y2', String(center.y))
+  }
 
   function appendNodeBadge(card, hasSubCanvas, isHostRoot) {
     if (!hasSubCanvas && !isHostRoot) return
@@ -91,7 +106,10 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     stage.style.width = width + 'px'
     stage.style.height = height + 'px'
     pathsById = {}
+    bridgesById = {}
     cardsById = {}
+    var hasIncoming = {}
+    var hasOutgoing = {}
 
     var svg = document.createElementNS(svgNS, 'svg')
     svg.setAttribute('class', 'connections')
@@ -116,7 +134,19 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         path.setAttribute('opacity', '0.45')
         pathsById[node.id + ':' + parentId] = { path: path, nodeId: node.id, parentId: parentId }
         svg.appendChild(path)
+        hasOutgoing[parentId] = true
+        hasIncoming[node.id] = true
       })
+    })
+    nodes.forEach(function (node) {
+      if (!isHiddenNode(node) || !hasIncoming[node.id] || !hasOutgoing[node.id]) return
+      var line = document.createElementNS(svgNS, 'line')
+      line.setAttribute('stroke', '#7c5cbf')
+      line.setAttribute('stroke-width', '2')
+      line.setAttribute('opacity', '0.45')
+      bridgesById[node.id] = line
+      placeBridge(line, node, positions[node.id])
+      svg.appendChild(line)
     })
     stage.appendChild(svg)
 
@@ -125,7 +155,7 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
 
     nodes.forEach(function (node) {
       var position = positions[node.id]
-      if (!position) return
+      if (!position || isHiddenNode(node)) return
       var size = sizeOf(node)
       var card = document.createElement('article')
       card.className = 'node'
