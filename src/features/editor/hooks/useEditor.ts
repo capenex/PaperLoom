@@ -5,6 +5,7 @@ import { activeCanvasDocument, createInitialDocument } from '../data/document'
 import { useCanvasNavigation } from './useCanvasNavigation'
 import { useDocumentMutations } from './useDocumentMutations'
 import { useEditorSelection } from './useEditorSelection'
+import { useNodeClipboard } from './useNodeClipboard'
 import { useNodeMutations } from './useNodeMutations'
 import { usePendingNodeAction } from './usePendingNodeAction'
 import { useStructureMutations } from './useStructureMutations'
@@ -52,6 +53,15 @@ export function useEditor() {
   const nodeMutations = useNodeMutations(mutationContext)
   const documentMutations = useDocumentMutations(mutationContext)
   const structure = useStructureMutations(mutationContext)
+  const clipboard = useNodeClipboard({
+    document,
+    activeCanvasId: navigation.activeCanvasId,
+    selectedNodeId: selection.selectedNode?.id ?? null,
+    editingNodeId: selection.editingNodeId,
+    setDocument,
+    setSelectedNodeId: selection.setSelectedNodeId,
+    onDeleteNode: nodeMutations.deleteNode,
+  })
   const pendingActions = usePendingNodeAction({
     document: currentSlice,
     defaults: currentSlice.defaults,
@@ -68,6 +78,7 @@ export function useEditor() {
     ...nodeMutations,
     ...documentMutations,
     ...structure,
+    ...clipboard,
     pending: pendingActions.pending,
     armStructure: pendingActions.armStructure,
     armFit: pendingActions.armFit,

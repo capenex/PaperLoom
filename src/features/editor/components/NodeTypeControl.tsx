@@ -1,30 +1,35 @@
 import { useRef } from 'react'
 import type { ChangeEvent } from 'react'
-import { FileCode, FileText, Heading, Image, ImagePlus } from 'lucide-react'
+import { FileCode, FileText, Heading, Image, ImagePlus, Pencil } from 'lucide-react'
+import { cn } from 'cn'
 
 import { Button } from '@/shared/components/ui/button'
-import type { NodeContent, StaticFileFormat, TitleNodeContent } from '@/shared/types/paper'
+import type { NodeContent, StaticFileFormat } from '@/shared/types/paper'
 import { INBOX_SAVE_FAILED, saveImageFileToInbox } from '../lib/inboxUpload'
 import { detectStaticFileFormat } from '../lib/staticMarkdown'
 
 interface NodeTypeControlProps {
-  readonly content: NodeContent
+  readonly content: NodeContent | undefined
   readonly onChangeKind: (kind: NodeContent['kind']) => void
   readonly onUpdateTitle: (title: string, subtitle: string) => void
   readonly onPickImage: (src: string, alt: string) => void
   readonly onPickFile: (fileName: string, format: StaticFileFormat, text: string) => void
+  readonly onEditText?: () => void
 }
 
 interface NodeKindButtonsProps {
-  readonly kind: NodeContent['kind']
+  readonly kind: NodeContent['kind'] | undefined
+  readonly disabled: boolean
   readonly onChangeKind: (kind: NodeContent['kind']) => void
 }
 
 interface ReplaceImageButtonProps {
+  readonly altText: string
   readonly onPickImage: (src: string, alt: string) => void
 }
 
 interface PickStaticFileButtonProps {
+  readonly fileName: string
   readonly onPickFile: (fileName: string, format: StaticFileFormat, text: string) => void
 }
 
@@ -35,102 +40,109 @@ const NODE_KIND_ITEMS = [
   {
     value: 'text',
     label: '富文本',
-    title: '切换为富文本节点（支持 Markdown 快捷语法与行内公式）',
     Icon: FileText,
   },
   {
     value: 'title',
     label: '纯标题',
-    title: '切换为纯标题节点（专为触发事件设计，在顶部工具栏直接输入主副标题）',
     Icon: Heading,
   },
   {
     value: 'image',
     label: '多媒体',
-    title: '切换为多媒体节点（展示图片，单击放大，再次点击查看详情）',
     Icon: Image,
   },
   {
     value: 'file',
     label: '静态文件',
-    title: '切换为静态文件节点（仅静态展示源代码或 Markdown 文件，双击在右侧展开）',
     Icon: FileCode,
   },
 ] satisfies readonly {
   readonly value: NodeContent['kind']
   readonly label: string
-  readonly title: string
   readonly Icon: typeof FileText
 }[]
 
 const TITLE_INPUT_CLS =
-  'h-7 rounded-lg border border-slate-200/90 bg-white px-2.5 text-xs text-slate-800 shadow-2xs transition-colors outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20'
+  'h-8 rounded-md border border-slate-200/90 bg-white px-2.5 text-[13px] text-slate-800 shadow-2xs transition-colors outline-none placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-100/70 disabled:opacity-45'
 
-function NodeKindButtons({ kind, onChangeKind }: Readonly<NodeKindButtonsProps>) {
+function NodeKindButtons({ kind, disabled, onChangeKind }: Readonly<NodeKindButtonsProps>) {
   return (
     <fieldset
       aria-label="节点类型"
-      className="m-0 inline-flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-100/90 p-0.5 shadow-inner"
+      disabled={disabled}
+      className={cn(
+        'm-0 inline-flex h-8 items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-100/90 p-0.5 shadow-inner',
+        disabled && 'opacity-45',
+      )}
     >
-      {NODE_KIND_ITEMS.map(({ value, label, title, Icon }) => (
-        <Button
-          key={value}
-          type="button"
-          variant={kind === value ? 'default' : 'ghost'}
-          size="xs"
-          aria-pressed={kind === value}
-          title={title}
-          className={
-            kind === value
-              ? 'shadow-xs'
-              : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
-          }
-          onClick={() => {
-            onChangeKind(value)
-          }}
-        >
-          <Icon aria-hidden="true" />
-          {label}
-        </Button>
-      ))}
+      {NODE_KIND_ITEMS.map(({ value, label, Icon }) => {
+        const isCurrent = !disabled && kind === value
+        return (
+          <button
+            key={value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={isCurrent}
+            onClick={() => {
+              onChangeKind(value)
+            }}
+            className={cn(
+              'inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-3 text-[13px] font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed',
+              isCurrent
+                ? 'bg-primary text-white shadow-2xs'
+                : 'text-slate-600 hover:bg-white/75 hover:text-slate-900',
+            )}
+          >
+            <Icon className="size-3.5" aria-hidden="true" />
+            <span>{label}</span>
+          </button>
+        )
+      })}
     </fieldset>
   )
 }
 
 function InlineTitleInputs({
-  content,
+  title,
+  subtitle,
+  disabled,
   onUpdateTitle,
 }: Readonly<{
-  content: TitleNodeContent
+  title: string
+  subtitle: string
+  disabled: boolean
   onUpdateTitle: (title: string, subtitle: string) => void
 }>) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex h-8 items-center gap-1.5">
       <input
         type="text"
         aria-label="主标题"
+        disabled={disabled}
         placeholder="输入主标题…"
-        value={content.title}
+        value={title}
         onChange={(event) => {
-          onUpdateTitle(event.target.value, content.subtitle)
+          onUpdateTitle(event.target.value, subtitle)
         }}
-        className={`${TITLE_INPUT_CLS} w-32 font-semibold sm:w-36`}
+        className={`${TITLE_INPUT_CLS} w-36 font-semibold`}
       />
       <input
         type="text"
         aria-label="副标题"
+        disabled={disabled}
         placeholder="输入副标题（可选）…"
-        value={content.subtitle}
+        value={subtitle}
         onChange={(event) => {
-          onUpdateTitle(content.title, event.target.value)
+          onUpdateTitle(title, event.target.value)
         }}
-        className={`${TITLE_INPUT_CLS} w-36 text-slate-600 sm:w-44`}
+        className={`${TITLE_INPUT_CLS} w-44 text-slate-600`}
       />
     </div>
   )
 }
 
-function ReplaceImageButton({ onPickImage }: Readonly<ReplaceImageButtonProps>) {
+function ReplaceImageButton({ altText, onPickImage }: Readonly<ReplaceImageButtonProps>) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -147,20 +159,22 @@ function ReplaceImageButton({ onPickImage }: Readonly<ReplaceImageButtonProps>) 
   }
 
   return (
-    <>
+    <div className="flex h-8 items-center gap-2">
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="border-slate-200/90 bg-white text-slate-700 shadow-2xs hover:bg-slate-50"
-        title="从本地选择图片替换当前多媒体节点内容"
+        className="h-8 border-slate-200/90 bg-white px-3 text-[13px] text-slate-700 shadow-2xs hover:bg-slate-50"
         onClick={() => {
           fileInputRef.current?.click()
         }}
       >
-        <ImagePlus className="text-primary" aria-hidden="true" />
+        <ImagePlus className="size-4 text-primary" aria-hidden="true" />
         更换图片
       </Button>
+      <span className="max-w-44 truncate text-xs text-slate-400">
+        {altText || '未命名图片'}
+      </span>
       <input
         ref={fileInputRef}
         type="file"
@@ -170,11 +184,11 @@ function ReplaceImageButton({ onPickImage }: Readonly<ReplaceImageButtonProps>) 
         className="hidden"
         onChange={handleFileChange}
       />
-    </>
+    </div>
   )
 }
 
-function PickStaticFileButton({ onPickFile }: Readonly<PickStaticFileButtonProps>) {
+function PickStaticFileButton({ fileName, onPickFile }: Readonly<PickStaticFileButtonProps>) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
@@ -188,20 +202,22 @@ function PickStaticFileButton({ onPickFile }: Readonly<PickStaticFileButtonProps
   }
 
   return (
-    <>
+    <div className="flex h-8 items-center gap-2">
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="border-slate-200/90 bg-white text-slate-700 shadow-2xs hover:bg-slate-50"
-        title="选择本地源代码或 Markdown 文件进行静态展示"
+        className="h-8 border-slate-200/90 bg-white px-3 text-[13px] text-slate-700 shadow-2xs hover:bg-slate-50"
         onClick={() => {
           fileInputRef.current?.click()
         }}
       >
-        <FileCode className="text-primary" aria-hidden="true" />
+        <FileCode className="size-4 text-primary" aria-hidden="true" />
         选择文件
       </Button>
+      <span className="max-w-44 truncate text-xs text-slate-400">
+        {fileName || '未选择文件'}
+      </span>
       <input
         ref={fileInputRef}
         type="file"
@@ -211,27 +227,64 @@ function PickStaticFileButton({ onPickFile }: Readonly<PickStaticFileButtonProps
         className="hidden"
         onChange={handleFileChange}
       />
-    </>
+    </div>
   )
 }
 
-/** 节点操作栏中的节点类型切换（富文本 / 纯标题 / 多媒体 / 静态文件）、标题行内编辑及资源导入 */
+/** 节点类型与内容编辑区（上下两行结构：第一行节点类型选择，第二行标题输入/正文编辑/媒体替换） */
 export function NodeTypeControl({
   content,
   onChangeKind,
   onUpdateTitle,
   onPickImage,
   onPickFile,
+  onEditText,
 }: Readonly<NodeTypeControlProps>) {
+  const disabled = content === undefined
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="hidden text-xs text-slate-500 2xl:inline">节点类型</span>
-      <NodeKindButtons kind={content.kind} onChangeKind={onChangeKind} />
-      {content.kind === 'title' && (
-        <InlineTitleInputs content={content} onUpdateTitle={onUpdateTitle} />
+    <div className="flex h-[70px] flex-col justify-between gap-1.5">
+      <NodeKindButtons
+        kind={content?.kind}
+        disabled={disabled}
+        onChangeKind={onChangeKind}
+      />
+      {content === undefined && (
+        <InlineTitleInputs
+          title=""
+          subtitle=""
+          disabled
+          onUpdateTitle={onUpdateTitle}
+        />
       )}
-      {content.kind === 'image' && <ReplaceImageButton onPickImage={onPickImage} />}
-      {content.kind === 'file' && <PickStaticFileButton onPickFile={onPickFile} />}
+      {content?.kind === 'title' && (
+        <InlineTitleInputs
+          title={content.title}
+          subtitle={content.subtitle}
+          disabled={false}
+          onUpdateTitle={onUpdateTitle}
+        />
+      )}
+      {content?.kind === 'text' && (
+        <div className="flex h-8 items-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 border-slate-200/90 bg-white px-3 text-[13px] text-slate-700 shadow-2xs hover:bg-slate-50"
+            onClick={onEditText}
+          >
+            <Pencil className="size-4 text-primary" aria-hidden="true" />
+            编辑正文
+          </Button>
+        </div>
+      )}
+      {content?.kind === 'image' && (
+        <ReplaceImageButton altText={content.alt} onPickImage={onPickImage} />
+      )}
+      {content?.kind === 'file' && (
+        <PickStaticFileButton fileName={content.fileName} onPickFile={onPickFile} />
+      )}
     </div>
   )
 }

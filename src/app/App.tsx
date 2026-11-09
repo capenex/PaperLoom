@@ -28,47 +28,44 @@ function BrandMark() {
 
 function AppHeader({ editor }: Readonly<EditorSectionProps>) {
   return (
-    <header className="z-10 flex shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-2 shadow-[0_1px_3px_rgba(15,23,42,0.03)] backdrop-blur-md">
-      <BrandMark />
-      <span className="hidden h-5 w-px bg-slate-200/80 sm:block" aria-hidden="true" />
-      <div className="min-w-0 flex-1">
-        <EditorToolbar
-          selectedNode={editor.selectedNode}
-          defaults={editor.activeDocument.defaults}
-          rootCount={editor.activeDocument.rootIds.length}
-          activeCanvasId={editor.activeCanvasId}
-          activeHostNodeId={editor.activeHostNodeId}
-          onAddRoot={editor.addRoot}
-          onUpdateDefaults={editor.updateDefaults}
-          onAddChild={editor.addChild}
-          onAddSibling={editor.addSibling}
-          onDeleteNode={editor.deleteNode}
-          onChangeNodeKind={editor.changeKind}
-          onUpdateNodeTitle={editor.updateTitle}
-          onUpdateNodeImage={editor.updateImage}
-          onUpdateNodeFile={editor.updateFile}
-          onUpdateLayout={editor.updateLayout}
-          onUpdateNodeEvents={editor.updateEvents}
-          onEnterSubCanvas={editor.enterSubCanvas}
-          onEditNodeText={editor.startEditing}
-          parents={editor.activeDocument.nodes.filter(
-            (node) => editor.selectedNode?.parentIds.includes(node.id) ?? false,
-          )}
-          onRemoveParent={editor.removeParent}
-          onSetNodeHidden={editor.setHidden}
-          pending={editor.pending}
-          onArmStructure={() => {
-            editor.armStructure(editor.selectedNode?.id ?? null)
-          }}
-          onArmFit={editor.armFit}
-        />
-      </div>
-      <div className="w-48 shrink-0">
-        <ProjectPackageControls
-          document={editor.document}
-          onRestoreDocument={editor.replaceDocument}
-        />
-      </div>
+    <header className="z-10 shrink-0 border-b border-slate-200/80 bg-white/95 shadow-[0_1px_3px_rgba(15,23,42,0.03)] backdrop-blur-md">
+      <EditorToolbar
+        brandSlot={<BrandMark />}
+        rightSlot={
+          <ProjectPackageControls
+            document={editor.document}
+            onRestoreDocument={editor.replaceDocument}
+          />
+        }
+        selectedNode={editor.selectedNode}
+        defaults={editor.activeDocument.defaults}
+        rootCount={editor.activeDocument.rootIds.length}
+        activeCanvasId={editor.activeCanvasId}
+        activeHostNodeId={editor.activeHostNodeId}
+        onAddRoot={editor.addRoot}
+        onUpdateDefaults={editor.updateDefaults}
+        onAddChild={editor.addChild}
+        onAddSibling={editor.addSibling}
+        onDeleteNode={editor.deleteNode}
+        onChangeNodeKind={editor.changeKind}
+        onUpdateNodeTitle={editor.updateTitle}
+        onUpdateNodeImage={editor.updateImage}
+        onUpdateNodeFile={editor.updateFile}
+        onUpdateLayout={editor.updateLayout}
+        onUpdateNodeEvents={editor.updateEvents}
+        onEnterSubCanvas={editor.enterSubCanvas}
+        onEditNodeText={editor.startEditing}
+        parents={editor.activeDocument.nodes.filter(
+          (node) => editor.selectedNode?.parentIds.includes(node.id) ?? false,
+        )}
+        onRemoveParent={editor.removeParent}
+        onSetNodeHidden={editor.setHidden}
+        pending={editor.pending}
+        onArmStructure={() => {
+          editor.armStructure(editor.selectedNode?.id ?? null)
+        }}
+        onArmFit={editor.armFit}
+      />
     </header>
   )
 }

@@ -7,6 +7,7 @@ export interface MarkdownSyntaxSpan {
 }
 
 const GUARD_LINE_PREFIX_PATTERN = /^\u200B*(?:#{1,3}|>|[-*]|\d+\.)[ \u00A0]*/u
+const PAGE_BREAK_SYNTAX_LINE_PATTERN = /^[\s\u00A0\u200B]*-{3,}[\s\u00A0\u200B]*$/u
 
 function mergeSyntaxSpans(spans: readonly MarkdownSyntaxSpan[]): readonly MarkdownSyntaxSpan[] {
   const sorted = [...spans].sort((a, b) => a.start - b.start)
@@ -23,10 +24,13 @@ function mergeSyntaxSpans(spans: readonly MarkdownSyntaxSpan[]): readonly Markdo
 }
 
 /**
- * 标记一行源码里属于「语法」的字符区间：行首前缀、转义反斜杠、内联定界符。
+ * 标记一行源码里属于「语法」的字符区间：行首前缀、--- 分页线、转义反斜杠、内联定界符。
  * 转义对里只有第一个反斜杠是语法，被转义的字符是内容，可以携带富文本样式。
  */
 export function collectMarkdownSyntaxSpans(lineText: string): readonly MarkdownSyntaxSpan[] {
+  if (PAGE_BREAK_SYNTAX_LINE_PATTERN.test(lineText)) {
+    return [{ start: 0, end: lineText.length }]
+  }
   const spans: MarkdownSyntaxSpan[] = []
   const prefix = GUARD_LINE_PREFIX_PATTERN.exec(lineText)
   if (prefix !== null) spans.push({ start: 0, end: prefix[0].length })

@@ -1,7 +1,7 @@
 /**
- * 富文本节点与纯标题节点的自适应尺寸计算（Ctrl/Cmd + 左键单击触发）
+ * 富文本节点与纯标题节点的自适应尺寸计算（Ctrl/Cmd + 左键单击或工具栏「贴合内容」触发）
  *
- * 结合纯文本视觉宽度估算与真实 DOM 离屏测量，将节点宽高一步缩放到贴合内容的合适尺寸。
+ * 多页富文本节点根据所有页面中最大的宽度与最大的高度共同确定尺寸，避免翻页时卡片尺寸跳动。
  */
 
 import {
@@ -19,12 +19,15 @@ import type {
   TextNodeContent,
   TitleNodeContent,
 } from '@/shared/types/paper'
+import { splitRichTextPages } from './markdownRichText'
 
 const CARD_PAD_X = 36
 const CARD_PAD_Y = 28
 const TITLE_PAD_X = 60
 const TITLE_PAD_Y = 48
 const COMFORT_TEXT_MAX_WIDTH = 460
+/** 多页节点右下方翻页器预留底部安全高度 */
+const PAGER_RESERVE_HEIGHT = 24
 
 function clampWidth(width: number): number {
   return Math.min(MAX_NODE_WIDTH, Math.max(MIN_NODE_WIDTH, Math.round(width)))
@@ -94,22 +97,24 @@ function extractLinesFromHtml(richText: string): readonly ParsedTextLine[] {
   }))
 }
 
-function estimateRichTextSize(content: TextNodeContent, fontSize: number): NodeSize {
-  const lines = extractLinesFromHtml(content.richText)
-  if (lines.length === 0) {
-    return { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
-  }
-
+function estimateSinglePageWidth(lines: readonly ParsedTextLine[], fontSize: number): number {
+  if (lines.length === 0) return DEFAULT_NODE_WIDTH
   let widestLine = 0
   for (const line of lines) {
     const linePx = estimateTextVisualWidth(line.text, fontSize * line.scale)
     if (linePx > widestLine) widestLine = linePx
   }
-
   const targetMax = Math.min(MAX_NODE_WIDTH, Math.max(COMFORT_TEXT_MAX_WIDTH, widestLine * 0.65))
-  const width = clampWidth(Math.min(targetMax, widestLine + CARD_PAD_X + 8))
-  const innerWidth = Math.max(80, width - CARD_PAD_X)
+  return clampWidth(Math.min(targetMax, widestLine + CARD_PAD_X + 8))
+}
 
+function estimateSinglePageHeightAtWidth(
+  lines: readonly ParsedTextLine[],
+  fontSize: number,
+  width: number,
+): number {
+  if (lines.length === 0) return DEFAULT_NODE_HEIGHT
+  const innerWidth = Math.max(80, width - CARD_PAD_X)
   let contentHeight = 0
   for (const line of lines) {
     const effectiveFont = fontSize * line.scale
@@ -117,14 +122,38 @@ function estimateRichTextSize(content: TextNodeContent, fontSize: number): NodeS
     const wrappedCount = Math.max(1, Math.ceil(linePx / innerWidth))
     contentHeight += wrappedCount * effectiveFont * 1.62 + 4
   }
+  return contentHeight + CARD_PAD_Y
+}
+
+function estimateRichTextSize(content: TextNodeContent, fontSize: number): NodeSize {
+  const pages = splitRichTextPages(content.richText)
+  const parsedPages = pages.map(extractLinesFromHtml)
+  const hasAnyContent = parsedPages.some((lines) => lines.length > 0)
+  if (!hasAnyContent) {
+    return { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT }
+  }
+
+  let maxWidth = MIN_NODE_WIDTH
+  for (const lines of parsedPages) {
+    const pageW = estimateSinglePageWidth(lines, fontSize)
+    if (pageW > maxWidth) maxWidth = pageW
+  }
+  const finalWidth = clampWidth(maxWidth)
+
+  let maxRawHeight = MIN_NODE_HEIGHT
+  for (const lines of parsedPages) {
+    const pageH = estimateSinglePageHeightAtWidth(lines, fontSize, finalWidth)
+    if (pageH > maxRawHeight) maxRawHeight = pageH
+  }
+  const pagerExtra = pages.length > 1 ? PAGER_RESERVE_HEIGHT : 0
 
   return {
-    width,
-    height: clampHeight(contentHeight + CARD_PAD_Y),
+    width: finalWidth,
+    height: clampHeight(maxRawHeight + pagerExtra),
   }
 }
 
-/** 纯逻辑估算节点贴合内容后的合适尺寸（仅针对富文本节点与纯标题节点） */
+/** 纯逻辑估算节点贴合内容后的合适尺寸（多页富文本取所有页面最大宽高） */
 export function estimateFittedNodeSize(
   node: PaperNode,
   defaults: DocumentDefaults,
@@ -144,6 +173,7 @@ function measureRichTextInDom(
   fallback: NodeSize,
 ): NodeSize {
   if (typeof document === 'undefined') return fallback
+  const pages = splitRichTextPages(richText)
   const probe = document.createElement('div')
   probe.className = 'node-rich-text'
   probe.style.position = 'fixed'
@@ -153,30 +183,47 @@ function measureRichTextInDom(
   probe.style.pointerEvents = 'none'
   probe.style.fontSize = `${fontSize}px`
   probe.style.lineHeight = '1.625'
-  probe.style.width = 'max-content'
-  probe.style.maxWidth = `${COMFORT_TEXT_MAX_WIDTH - CARD_PAD_X}px`
-  probe.innerHTML = richText
   document.body.appendChild(probe)
 
-  const naturalRect = probe.getBoundingClientRect()
-  if (naturalRect.width <= 0 || naturalRect.height <= 0) {
+  let maxDomWidth = fallback.width
+  let measuredAny = false
+  for (const pageHtml of pages) {
+    if (pageHtml.trim() === '') continue
+    probe.style.width = 'max-content'
+    probe.style.maxWidth = `${COMFORT_TEXT_MAX_WIDTH - CARD_PAD_X}px`
+    probe.innerHTML = pageHtml
+    const rect = probe.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
+      measuredAny = true
+      maxDomWidth = Math.max(maxDomWidth, rect.width + CARD_PAD_X + 6)
+    }
+  }
+
+  if (!measuredAny) {
     probe.remove()
     return fallback
   }
 
-  const width = clampWidth(Math.max(naturalRect.width + CARD_PAD_X + 6, fallback.width))
-  probe.style.width = `${width - CARD_PAD_X}px`
-  probe.style.maxWidth = 'none'
-  const wrappedHeight = Math.max(probe.scrollHeight, probe.getBoundingClientRect().height)
+  const finalWidth = clampWidth(maxDomWidth)
+  let maxWrappedHeight = 0
+  for (const pageHtml of pages) {
+    if (pageHtml.trim() === '') continue
+    probe.style.width = `${finalWidth - CARD_PAD_X}px`
+    probe.style.maxWidth = 'none'
+    probe.innerHTML = pageHtml
+    const pageH = Math.max(probe.scrollHeight, probe.getBoundingClientRect().height)
+    if (pageH > maxWrappedHeight) maxWrappedHeight = pageH
+  }
   probe.remove()
 
+  const pagerExtra = pages.length > 1 ? PAGER_RESERVE_HEIGHT : 0
   return {
-    width,
-    height: clampHeight(Math.max(wrappedHeight + CARD_PAD_Y + 4, MIN_NODE_HEIGHT)),
+    width: finalWidth,
+    height: clampHeight(Math.max(maxWrappedHeight + CARD_PAD_Y + 4 + pagerExtra, fallback.height)),
   }
 }
 
-/** 计算富文本或纯标题节点的贴合尺寸（优先结合真实 DOM 测量，无布局环境时回退到纯视觉估算） */
+/** 计算富文本或纯标题节点的贴合尺寸（多页富文本取所有页面的最大宽和最大高） */
 export function fitNodeSize(node: PaperNode, defaults: DocumentDefaults): NodeSize | null {
   const estimated = estimateFittedNodeSize(node, defaults)
   if (estimated === null) return null

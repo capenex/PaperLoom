@@ -147,6 +147,61 @@ body {
   overflow-wrap: anywhere;
 }
 
+.node-rich-text.has-pager {
+  padding-bottom: 20px;
+}
+
+.node-pager {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  font-size: 11px;
+  color: #475569;
+  user-select: none;
+}
+
+.node-pager-btn {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.node-pager-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.node-pager-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.node-pager-label {
+  padding: 0 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+
 .node-rich-text p { margin: 0; }
 .node-rich-text p + p { margin-top: 4px; }
 .node-rich-text a { color: #7c3aed; text-decoration: underline; }

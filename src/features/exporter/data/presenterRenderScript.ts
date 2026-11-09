@@ -21,7 +21,14 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   var pathsById = {}
   var bridgesById = {}
   var cardsById = {}
+  var nodePageById = {}
   var bindCardInteractions = null
+
+  function splitRichTextPages(richText) {
+    if (typeof richText !== 'string' || richText.trim() === '') return ['']
+    var parts = richText.split(/<hr\b[^>]*data-pl-page-break[^>]*>/i)
+    return parts.length > 0 ? parts : [richText]
+  }
 
   // 隐藏节点照常占位但不出卡片；进出线都在时用一段横线把两端接成一根
   function isHiddenNode(node) {
@@ -242,16 +249,69 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         var labelText = '空白节点'
         var richText = content.richText
         if (typeof richText === 'string' && richText.trim() !== '') {
+          var pages = splitRichTextPages(richText)
           var rich = document.createElement('div')
-          rich.className = 'node-rich-text'
+          rich.className = pages.length > 1 ? 'node-rich-text has-pager' : 'node-rich-text'
           rich.style.fontSize = defaultFontSize + 'px'
-          rich.innerHTML = richText
-          rich.querySelectorAll('a').forEach(function (anchor) {
-            if (anchor.hasAttribute('data-pl-ref')) return
-            anchor.setAttribute('target', '_blank')
-            anchor.setAttribute('rel', 'noopener noreferrer')
-          })
           card.appendChild(rich)
+
+          var pager = null
+          var pagerPrev = null
+          var pagerLabel = null
+          var pagerNext = null
+
+          function renderNodePage(nextIdx) {
+            var clamped = Math.max(0, Math.min(pages.length - 1, nextIdx))
+            nodePageById[node.id] = clamped
+            var pageHtml = pages[clamped] || ''
+            rich.innerHTML = pageHtml
+            rich.querySelectorAll('a').forEach(function (anchor) {
+              if (anchor.hasAttribute('data-pl-ref')) return
+              anchor.setAttribute('target', '_blank')
+              anchor.setAttribute('rel', 'noopener noreferrer')
+            })
+            if (pagerLabel) pagerLabel.textContent = (clamped + 1) + '/' + pages.length
+            if (pagerPrev) pagerPrev.disabled = clamped <= 0
+            if (pagerNext) pagerNext.disabled = clamped >= pages.length - 1
+          }
+
+          if (pages.length > 1) {
+            pager = document.createElement('div')
+            pager.className = 'node-pager'
+            pager.setAttribute('role', 'group')
+            pager.setAttribute('aria-label', '节点翻页')
+            ;['pointerdown', 'click', 'dblclick'].forEach(function (evName) {
+              pager.addEventListener(evName, function (ev) {
+                ev.stopPropagation()
+              })
+            })
+            pagerPrev = document.createElement('button')
+            pagerPrev.type = 'button'
+            pagerPrev.className = 'node-pager-btn'
+            pagerPrev.setAttribute('aria-label', '上一页')
+            pagerPrev.textContent = '‹'
+            pagerPrev.addEventListener('click', function () {
+              renderNodePage((nodePageById[node.id] || 0) - 1)
+              if (bindCardInteractions) bindCardInteractions()
+            })
+            pagerLabel = document.createElement('span')
+            pagerLabel.className = 'node-pager-label'
+            pagerNext = document.createElement('button')
+            pagerNext.type = 'button'
+            pagerNext.className = 'node-pager-btn'
+            pagerNext.setAttribute('aria-label', '下一页')
+            pagerNext.textContent = '›'
+            pagerNext.addEventListener('click', function () {
+              renderNodePage((nodePageById[node.id] || 0) + 1)
+              if (bindCardInteractions) bindCardInteractions()
+            })
+            pager.appendChild(pagerPrev)
+            pager.appendChild(pagerLabel)
+            pager.appendChild(pagerNext)
+            card.appendChild(pager)
+          }
+
+          renderNodePage(nodePageById[node.id] || 0)
           var text = rich.textContent || ''
           if (text !== '') labelText = text.length > 40 ? text.slice(0, 40) + '…' : text
         } else {

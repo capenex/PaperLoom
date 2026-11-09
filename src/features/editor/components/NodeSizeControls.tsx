@@ -9,24 +9,27 @@ import { SizeSlider } from './SizeSlider'
 interface NodeSizeControlsProps {
   readonly width: number
   readonly height: number
+  readonly disabled?: boolean
   readonly onWidthChange: (width: number) => void
   readonly onHeightChange: (height: number) => void
 }
 
-/** 选中节点的尺寸调节；写入节点自身布局，覆盖文档预设 */
+/** 选中节点的双行尺寸调节；未选中节点时保持原位虚化禁用 */
 export function NodeSizeControls({
   width,
   height,
+  disabled = false,
   onWidthChange,
   onHeightChange,
 }: Readonly<NodeSizeControlsProps>) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex h-[70px] flex-col justify-between gap-1.5">
       <SizeSlider
         label="宽度"
         value={width}
         min={MIN_NODE_WIDTH}
         max={MAX_NODE_WIDTH}
+        disabled={disabled}
         onChange={onWidthChange}
       />
       <SizeSlider
@@ -34,6 +37,7 @@ export function NodeSizeControls({
         value={height}
         min={MIN_NODE_HEIGHT}
         max={MAX_NODE_HEIGHT}
+        disabled={disabled}
         onChange={onHeightChange}
       />
     </div>

@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+
 import type {
   CanvasId,
   DocumentDefaults,
@@ -8,13 +11,25 @@ import type {
   PaperNode,
   StaticFileFormat,
 } from '@/shared/types/paper'
-import { Move, Scaling } from 'lucide-react'
-import { Button } from '@/shared/components/ui/button'
 import type { PendingNodeAction } from '../lib/pendingNodeAction'
-import { DocumentToolbar } from './DocumentToolbar'
-import { NodeInspector } from './NodeInspector'
+import {
+  INITIAL_RIBBON_STATE,
+  doubleClickRibbonTab,
+  selectRibbonTab,
+  toggleRibbonCollapsed,
+} from '../lib/ribbonToolbarState'
+import {
+  HomeRibbonPanel,
+  InsertRibbonPanel,
+  InteractionRibbonPanel,
+  LayoutRibbonPanel,
+} from './RibbonPanels'
+import type { RibbonPanelSharedProps } from './RibbonPanels'
+import { RibbonTabBar } from './RibbonPrimitives'
 
 interface EditorToolbarProps {
+  readonly brandSlot?: ReactNode
+  readonly rightSlot?: ReactNode
   readonly selectedNode: PaperNode | undefined
   readonly defaults: DocumentDefaults
   readonly rootCount: number
@@ -46,44 +61,23 @@ interface EditorToolbarProps {
   readonly onArmFit: () => void
 }
 
-/** 待命指令按钮：结构移动（Alt 等价）与贴合内容（Ctrl 等价），两种编辑栏状态下都可见 */
-function PendingActionButtons({
-  pending,
-  onArmStructure,
-  onArmFit,
+function ActiveRibbonDeck({
+  activeTab,
+  panelProps,
 }: Readonly<{
-  pending: PendingNodeAction | null
-  onArmStructure: () => void
-  onArmFit: () => void
+  activeTab: typeof INITIAL_RIBBON_STATE.activeTab
+  panelProps: RibbonPanelSharedProps
 }>) {
-  return (
-    <div className="flex shrink-0 items-center gap-1">
-      <Button
-        type="button"
-        variant={pending?.kind === 'structure' ? 'default' : 'outline'}
-        size="sm"
-        title="Alt 等价：选中节点后点击，再点目标节点加父 / 点空白脱根；未选中时先点源节点"
-        onClick={onArmStructure}
-      >
-        <Move aria-hidden="true" />
-        结构移动
-      </Button>
-      <Button
-        type="button"
-        variant={pending?.kind === 'fit' ? 'default' : 'outline'}
-        size="sm"
-        title="Ctrl 等价：点击后选一个节点，按内容自适应宽高"
-        onClick={onArmFit}
-      >
-        <Scaling aria-hidden="true" />
-        贴合内容
-      </Button>
-    </div>
-  )
+  if (activeTab === 'insert') return <InsertRibbonPanel {...panelProps} />
+  if (activeTab === 'layout') return <LayoutRibbonPanel {...panelProps} />
+  if (activeTab === 'interaction') return <InteractionRibbonPanel {...panelProps} />
+  return <HomeRibbonPanel {...panelProps} />
 }
 
-/** 编辑栏：选中节点时编辑该节点（含标题文字与事件绑定），未选中时进行文档级宏观操作 */
+/** PPT / WPS 式双层分类与可折叠编辑栏：顶层常驻分类选项卡与文件下拉菜单，下层按选项卡展示功能区 */
 export function EditorToolbar({
+  brandSlot,
+  rightSlot,
   selectedNode,
   defaults,
   rootCount,
@@ -109,51 +103,61 @@ export function EditorToolbar({
   onArmStructure,
   onArmFit,
 }: Readonly<EditorToolbarProps>) {
-  if (selectedNode === undefined) {
-    return (
-      <div className="flex flex-wrap items-center gap-2.5">
-        <PendingActionButtons
-          pending={pending}
-          onArmStructure={onArmStructure}
-          onArmFit={onArmFit}
-        />
-        <DocumentToolbar
-          defaults={defaults}
-          onAddRoot={onAddRoot}
-          onUpdateDefaults={onUpdateDefaults}
-        />
-      </div>
-    )
+  const [ribbonState, setRibbonState] = useState(INITIAL_RIBBON_STATE)
+
+  const panelProps: RibbonPanelSharedProps = {
+    selectedNode,
+    defaults,
+    rootCount,
+    activeCanvasId,
+    activeHostNodeId,
+    onAddRoot,
+    onUpdateDefaults,
+    onAddChild,
+    onAddSibling,
+    onDeleteNode,
+    onChangeNodeKind,
+    onUpdateNodeTitle,
+    onUpdateNodeImage,
+    onUpdateNodeFile,
+    onUpdateLayout,
+    onUpdateNodeEvents,
+    onEnterSubCanvas,
+    onEditNodeText,
+    parents,
+    onRemoveParent,
+    onSetNodeHidden,
+    pending,
+    onArmStructure,
+    onArmFit,
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <PendingActionButtons
-        pending={pending}
-        onArmStructure={onArmStructure}
-        onArmFit={onArmFit}
+    <div className="flex flex-col">
+      <RibbonTabBar
+        activeTab={ribbonState.activeTab}
+        collapsed={ribbonState.collapsed}
+        brandSlot={brandSlot}
+        rightSlot={rightSlot}
+        onSelectTab={(tab) => {
+          setRibbonState((prev) => selectRibbonTab(prev, tab))
+        }}
+        onDoubleClickTab={(tab) => {
+          setRibbonState((prev) => doubleClickRibbonTab(prev, tab))
+        }}
+        onToggleCollapsed={() => {
+          setRibbonState((prev) => toggleRibbonCollapsed(prev))
+        }}
       />
-      <NodeInspector
-      node={selectedNode}
-      defaults={defaults}
-      rootCount={rootCount}
-      activeCanvasId={activeCanvasId}
-      isHostRoot={selectedNode.id === activeHostNodeId}
-      onAddChild={onAddChild}
-      onAddSibling={onAddSibling}
-      onDelete={onDeleteNode}
-      onChangeKind={onChangeNodeKind}
-      onUpdateTitle={onUpdateNodeTitle}
-      onUpdateImage={onUpdateNodeImage}
-      onUpdateFile={onUpdateNodeFile}
-      onUpdateLayout={onUpdateLayout}
-      onUpdateEvents={onUpdateNodeEvents}
-      onEnterSubCanvas={onEnterSubCanvas}
-      onEditNodeText={onEditNodeText}
-        parents={parents}
-        onRemoveParent={onRemoveParent}
-        onSetHidden={onSetNodeHidden}
-      />
+      {!ribbonState.collapsed && (
+        <div
+          role="tabpanel"
+          aria-label="编辑栏功能区"
+          className="flex h-[86px] items-center border-t border-slate-200/75 bg-slate-50/70 px-4"
+        >
+          <ActiveRibbonDeck activeTab={ribbonState.activeTab} panelProps={panelProps} />
+        </div>
+      )}
     </div>
   )
 }

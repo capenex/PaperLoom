@@ -1,6 +1,6 @@
 import { ASCII_PUNCTUATION_PATTERN } from './markdownEscapes'
 
-export const BLOCK_TAG_PATTERN = /^(?:DIV|P|H[1-6]|BLOCKQUOTE|UL|OL|LI|PRE)$/iu
+export const BLOCK_TAG_PATTERN = /^(?:DIV|P|H[1-6]|BLOCKQUOTE|UL|OL|LI|PRE|HR)$/iu
 const PURE_MD_SYNTAX_PATTERN = /^[\s\u00A0\u200B]*(?:#{1,3}|[-*>]|\d+\.|\*{1,2}|~~|`|\$)+[\s\u00A0\u200B]*$/u
 const LINE_PREFIX_EXTRACT_PATTERN = /^((?:#{1,3}|>|[-*]|\d+\.)[ \u00A0]+)/u
 

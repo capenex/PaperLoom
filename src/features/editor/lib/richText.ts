@@ -8,7 +8,11 @@ import {
 } from '@/shared/lib/reference'
 import type { PaperReference } from '@/shared/types/paper'
 import { cleanBrowserArtifacts, unwrapElement } from './markdownClean'
-import { compileMarkdownRichTextHtml, toggleMarkdownListPrefix } from './markdownRichText'
+import {
+  compileMarkdownRichTextHtml,
+  insertMarkdownPageBreak,
+  toggleMarkdownListPrefix,
+} from './markdownRichText'
 import { collectMarkdownSyntaxSpans } from './markdownSyntaxSpans'
 import { placeCaretAt } from './markdownShortcuts'
 
@@ -233,6 +237,11 @@ export function runEditorCommand(
   onChange: (html: string) => void,
 ): void {
   if (editor === null) return
+  if (command === 'insertPageBreak') {
+    insertMarkdownPageBreak(editor)
+    emitHtml(editor, onChange)
+    return
+  }
   if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
     toggleMarkdownListPrefix(editor, command)
     emitHtml(editor, onChange)

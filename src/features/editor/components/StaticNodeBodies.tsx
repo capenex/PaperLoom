@@ -50,9 +50,8 @@ export function TitleNodeBody({ content, fontSize }: Readonly<TitleNodeBodyProps
 
   if (title === '' && subtitle === '') {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1">
+      <div className="flex h-full flex-col items-center justify-center">
         <span className="text-xs font-medium text-slate-400">空白标题</span>
-        <span className="text-[11px] text-slate-300">选中后在顶部栏输入主副标题</span>
       </div>
     )
   }

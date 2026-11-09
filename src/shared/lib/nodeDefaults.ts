@@ -15,9 +15,9 @@ export const FONT_SIZE_OPTIONS: readonly number[] = [12, 14, 16, 20, 24, 32]
 
 /** 编辑栏允许的节点尺寸范围 */
 export const MIN_NODE_WIDTH = 120
-export const MAX_NODE_WIDTH = 640
+export const MAX_NODE_WIDTH = 1000
 export const MIN_NODE_HEIGHT = 64
-export const MAX_NODE_HEIGHT = 480
+export const MAX_NODE_HEIGHT = 800
 
 export interface NodeSize {
   readonly width: number

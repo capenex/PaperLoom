@@ -14,11 +14,21 @@ import {
 } from './markdownEscapes'
 import { placeCaretAt } from './markdownShortcuts'
 
-const RENDERED_BLOCK_DETECT_PATTERN = /<(?:h[1-6]|ul|ol|blockquote|pre)\b|class="pl-math"/iu
+const RENDERED_BLOCK_DETECT_PATTERN = /<(?:h[1-6]|ul|ol|blockquote|pre|hr)\b|class="pl-math"/iu
 const HEADING_PREFIX_PATTERN = /^(\u200B*#{1,3})[ \u00A0]+/u
 const QUOTE_PREFIX_PATTERN = /^\u200B*>[ \u00A0]+/u
 const UL_PREFIX_PATTERN = /^\u200B*[-*][ \u00A0]+/u
 const OL_PREFIX_PATTERN = /^\u200B*\d+\.[ \u00A0]+/u
+const PAGE_BREAK_LINE_PATTERN = /^[\s\u00A0\u200B]*-{3,}[\s\u00A0\u200B]*$/u
+const PAGE_BREAK_HTML = '<hr data-pl-page-break="true">'
+const PAGE_BREAK_SPLIT_PATTERN = /<hr\b[^>]*data-pl-page-break[^>]*>/iu
+
+/** 按 `<hr data-pl-page-break="true">` 切分多页富文本；单页时返回长度为 1 的数组 */
+export function splitRichTextPages(richText: string): readonly string[] {
+  if (richText.trim() === '') return ['']
+  const pages = richText.split(PAGE_BREAK_SPLIT_PATTERN)
+  return pages.length > 0 ? pages : [richText]
+}
 
 interface InlineMarkdownRule {
   readonly pattern: RegExp
@@ -57,7 +67,11 @@ function extractEditorLineFragments(container: Node, out: DocumentFragment[]): v
   for (const child of Array.from(container.childNodes)) {
     if (child instanceof HTMLElement && BLOCK_TAG_PATTERN.test(child.tagName)) {
       flushInline()
-      if (hasChildBlockElement(child)) {
+      if (child.tagName.toUpperCase() === 'HR') {
+        const hrFrag = document.createDocumentFragment()
+        hrFrag.appendChild(document.createTextNode('---'))
+        out.push(hrFrag)
+      } else if (hasChildBlockElement(child)) {
         extractEditorLineFragments(child, out)
       } else if (child.childNodes.length === 0) {
         out.push(document.createDocumentFragment())
@@ -236,11 +250,18 @@ export function compileMarkdownRichTextHtml(editorHtml: string): string {
   while (index < fragments.length) {
     const frag = fragments[index]
     if (frag === undefined) break
-    if ((frag.textContent ?? '').trim().startsWith('```')) {
+    const rawLineText = frag.textContent ?? ''
+    if (rawLineText.trim().startsWith('```')) {
       flushList()
       const fenced = readFencedCodeBlock(fragments, index)
       htmlParts.push(fenced.html)
       index = fenced.nextIndex
+      continue
+    }
+    if (PAGE_BREAK_LINE_PATTERN.test(rawLineText)) {
+      flushList()
+      htmlParts.push(PAGE_BREAK_HTML)
+      index += 1
       continue
     }
 
@@ -299,6 +320,38 @@ function findTopLevelLineDiv(editor: HTMLDivElement, node: Node | null): HTMLDiv
     cur = cur.parentNode
   }
   return null
+}
+
+/**
+ * 工具栏点击「新建页」时，在当前所在行下方插入 `---` 分页线与新页首行，并将光标移入新页。
+ */
+export function insertMarkdownPageBreak(editor: HTMLDivElement | null): void {
+  if (editor === null) return
+  ensureTopLevelLineDivs(editor)
+
+  const selection = window.getSelection()
+  const range = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  const activeDiv = range === null ? null : findTopLevelLineDiv(editor, range.endContainer)
+  const allDivs = Array.from(editor.children).filter(
+    (el): el is HTMLDivElement => el instanceof HTMLDivElement,
+  )
+  const targetDiv = activeDiv ?? allDivs[allDivs.length - 1] ?? null
+
+  const hrDiv = document.createElement('div')
+  hrDiv.textContent = '---'
+  const newPageDiv = document.createElement('div')
+  newPageDiv.appendChild(document.createElement('br'))
+
+  if (targetDiv === null) {
+    editor.appendChild(hrDiv)
+    editor.appendChild(newPageDiv)
+  } else {
+    const nextSibling = targetDiv.nextSibling
+    editor.insertBefore(hrDiv, nextSibling)
+    editor.insertBefore(newPageDiv, nextSibling)
+  }
+
+  placeCaretAt(newPageDiv, 0)
 }
 
 /**

@@ -252,7 +252,7 @@ export function canAddParent(document: PaperDocument, nodeId: NodeId, targetId: 
   return describeLevelProblem(nodes, rootIds) === null
 }
 
-/** 追加一个父节点（多父）；若它原本是根节点，同时从根节点列表中移除 */
+/** 追加一个父节点（多父）；若它原本是根节点则从根列表移除，并将该节点移至 nodes 末尾以保证排在同级节点最后位置 */
 export function addParentNode(
   document: PaperDocument,
   nodeId: NodeId,
@@ -261,11 +261,11 @@ export function addParentNode(
   if (!canAddParent(document, nodeId, targetId)) return document
 
   const node = document.nodes.find(item => item.id === nodeId)
-  const nodes = document.nodes.map(item =>
-    item.id === nodeId ? { ...item, parentIds: [...item.parentIds, targetId] } : item,
-  )
+  if (node === undefined) return document
+  const updated: PaperNode = { ...node, parentIds: [...node.parentIds, targetId] }
+  const nodes = [...document.nodes.filter(item => item.id !== nodeId), updated]
   const rootIds =
-    node !== undefined && node.parentIds.length === 0
+    node.parentIds.length === 0
       ? document.rootIds.filter(id => id !== nodeId)
       : document.rootIds
 

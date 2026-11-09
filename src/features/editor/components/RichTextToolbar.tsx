@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react'
 import {
   Bold,
   Eraser,
+  FilePlus2,
   Highlighter,
   Italic,
   List,
@@ -200,6 +201,25 @@ export function RichTextToolbar({
         icon={Eraser}
         onCommand={onCommand}
       />
+
+      <ToolbarDivider />
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        aria-label="新建页"
+        title="新建页（插入 --- 分隔线）"
+        className="h-6 gap-1 px-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
+        onMouseDown={(event) => {
+          event.preventDefault()
+        }}
+        onClick={() => {
+          onCommand('insertPageBreak')
+        }}
+      >
+        <FilePlus2 className="size-3.5 text-primary" aria-hidden="true" />
+        新建页
+      </Button>
     </div>
   )
 }

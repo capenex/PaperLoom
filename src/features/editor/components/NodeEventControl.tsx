@@ -6,7 +6,6 @@ import { createId } from '@/shared/lib/id'
 import {
   DEFAULT_HOST_EXIT_EVENT,
   defaultEventsForNode,
-  findTriggeredEvent,
   isActionActiveInCanvas,
   resolveBindingTarget,
   resolveNodeEvents,
@@ -15,7 +14,7 @@ import type { CanvasId, NodeEventBinding, PaperNode } from '@/shared/types/paper
 import { NodeEventPopover } from './NodeEventPopover'
 
 interface NodeEventControlProps {
-  readonly node: PaperNode
+  readonly node: PaperNode | undefined
   readonly activeCanvasId: CanvasId | null
   readonly isHostRoot?: boolean | undefined
   readonly onUpdateEvents: (events: readonly NodeEventBinding[]) => void
@@ -107,13 +106,15 @@ function mergeSavedEventsFromCanvas(
 }
 
 function EventToggleButtons({
+  disabled,
   eventCount,
-  showEditButton,
+  canEditRichText,
   onToggleOpen,
   onEditNodeText,
 }: Readonly<{
+  disabled: boolean
   eventCount: number
-  showEditButton: boolean
+  canEditRichText: boolean
   onToggleOpen: () => void
   onEditNodeText: () => void
 }>) {
@@ -121,50 +122,53 @@ function EventToggleButtons({
     <>
       <button
         type="button"
+        disabled={disabled}
         onClick={onToggleOpen}
+        title={disabled ? '请先在画布中选中一个节点' : '管理节点触发事件与支线子画布'}
         className={cn(
-          'inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium shadow-2xs transition-colors',
-          eventCount > 0
+          'inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border px-2 text-xs font-medium shadow-2xs transition-colors disabled:pointer-events-none disabled:opacity-45',
+          !disabled && eventCount > 0
             ? 'border-primary/30 bg-primary/8 text-primary hover:bg-primary/12'
             : 'border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50',
         )}
       >
-        <Zap className="size-3.5" aria-hidden="true" />
+        <Zap className="size-3" aria-hidden="true" />
         <span>事件</span>
-        {eventCount > 0 && (
-          <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-bold text-primary">
+        {!disabled && eventCount > 0 && (
+          <span className="rounded bg-primary/15 px-1 text-[10px] font-bold tabular-nums text-primary">
             {eventCount}
           </span>
         )}
       </button>
 
-      {showEditButton && (
-        <button
-          type="button"
-          onClick={onEditNodeText}
-          title="双击已被事件占用，点击此处（或按住 Alt 双击节点）编辑富文本内容"
-          className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-lg border border-slate-200/90 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
-        >
-          <Pencil className="size-3.5 text-slate-500" aria-hidden="true" />
-          <span>编辑文字</span>
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={!canEditRichText}
+        onClick={onEditNodeText}
+        title={
+          canEditRichText
+            ? '打开富文本编辑器（支持按住 Alt 双击节点编辑）'
+            : '选中富文本节点时可点击此处编辑文字'
+        }
+        className="inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-slate-200/90 bg-white px-2 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-45"
+      >
+        <Pencil className="size-3 text-slate-500" aria-hidden="true" />
+        <span>编辑文字</span>
+      </button>
     </>
   )
 }
 
-/** 节点事件绑定工具栏入口：展示当前绑定事件数、提供富文本快捷编辑按钮与事件编辑浮窗 */
+/** 节点事件绑定工具栏入口：展示当前绑定事件数、提供富文本快捷编辑按钮与事件编辑浮窗（未选中节点时原位虚化） */
 export function NodeEventControl(props: Readonly<NodeEventControlProps>) {
   const { node, activeCanvasId, onUpdateEvents, onEnterSubCanvas, onEditNodeText } = props
   const isHostRoot = Boolean(props.isHostRoot)
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const rawEvents = resolveNodeEvents(node)
-  const events = effectiveEventsInCanvas(node, activeCanvasId, isHostRoot)
-  const isRichTextNode = node.content.kind === 'text'
-  const hostNodeId = isHostRoot ? node.id : null
-  const dblClickEvent = findTriggeredEvent(node, 'double-click', activeCanvasId, 'node', hostNodeId)
-  const dblClickOccupied = dblClickEvent?.action.type !== 'edit-node'
+  const disabled = node === undefined
+  const rawEvents = node === undefined ? [] : resolveNodeEvents(node)
+  const events = node === undefined ? [] : effectiveEventsInCanvas(node, activeCanvasId, isHostRoot)
+  const isRichTextNode = node?.content.kind === 'text'
 
   const handleUpdateEvents = (nextVisible: readonly NodeEventBinding[]): void => {
     onUpdateEvents(mergeSavedEventsFromCanvas(rawEvents, nextVisible, activeCanvasId))
@@ -183,16 +187,17 @@ export function NodeEventControl(props: Readonly<NodeEventControlProps>) {
   }, [open])
 
   return (
-    <div ref={containerRef} className="relative flex items-center gap-1.5">
+    <div ref={containerRef} className="relative flex h-6 items-center gap-1.5">
       <EventToggleButtons
+        disabled={disabled}
         eventCount={events.length}
-        showEditButton={isRichTextNode && dblClickOccupied}
+        canEditRichText={!disabled && isRichTextNode}
         onToggleOpen={() => {
           setOpen((prev) => !prev)
         }}
         onEditNodeText={onEditNodeText}
       />
-      {open && (
+      {open && node !== undefined && (
         <NodeEventPopover
           kind={node.content.kind}
           events={events}

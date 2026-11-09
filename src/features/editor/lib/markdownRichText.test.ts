@@ -2,9 +2,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Window } from 'happy-dom'
 
+import {
+  FALLBACK_DOCUMENT_DEFAULTS,
+  MAX_NODE_HEIGHT,
+  MAX_NODE_WIDTH,
+} from '@/shared/lib/nodeDefaults'
+import { estimateFittedNodeSize } from './fitNodeSize'
 import { cleanBrowserArtifacts } from './markdownClean'
 import { decompileRichTextToEditableHtml } from './markdownDecompile'
-import { compileMarkdownRichTextHtml, toggleMarkdownListPrefix } from './markdownRichText'
+import {
+  compileMarkdownRichTextHtml,
+  insertMarkdownPageBreak,
+  splitRichTextPages,
+  toggleMarkdownListPrefix,
+} from './markdownRichText'
 import { collectMarkdownSyntaxSpans } from './markdownSyntaxSpans'
 import {
   clearEditorFormatting,
@@ -313,3 +324,62 @@ void test('guard trims inline markdown delimiters from selection edges', () => {
 
   editor.remove()
 })
+
+void test('--- separator compiles into page breaks, round-trips through decompile, and insertMarkdownPageBreak adds a new page', () => {
+  const editorHtml = '<div># 第一页标题</div><div>第一页正文</div><div>---</div><div># 第二页标题</div>'
+  const compiled = compileMarkdownRichTextHtml(editorHtml)
+  assert.equal(
+    compiled,
+    '<h1>第一页标题</h1><div>第一页正文</div><hr data-pl-page-break="true"><h1>第二页标题</h1>',
+  )
+
+  const pages = splitRichTextPages(compiled)
+  assert.deepEqual(pages, ['<h1>第一页标题</h1><div>第一页正文</div>', '<h1>第二页标题</h1>'])
+
+  const decompiled = decompileRichTextToEditableHtml(compiled)
+  assert.equal(decompiled, editorHtml)
+
+  // Escaped \--- renders as literal --- paragraph and does not split pages
+  const escapedCompiled = compileMarkdownRichTextHtml('<div>\\---</div>')
+  assert.equal(escapedCompiled, '<div>---</div>')
+  assert.equal(splitRichTextPages(escapedCompiled).length, 1)
+  assert.equal(decompileRichTextToEditableHtml(escapedCompiled), '<div>\\---</div>')
+
+  // Toolbar 新建页 button inserts --- and a trailing empty line for the new page
+  const editor = document.createElement('div')
+  editor.innerHTML = '<div>第一页内容</div>'
+  document.body.appendChild(editor)
+  insertMarkdownPageBreak(editor)
+  assert.equal(editor.innerHTML, '<div>第一页内容</div><div>---</div><div><br></div>')
+  const compiledAfterInsert = compileMarkdownRichTextHtml(editor.innerHTML)
+  assert.deepEqual(splitRichTextPages(compiledAfterInsert), ['<div>第一页内容</div>', ''])
+  editor.remove()
+})
+
+void test('multi-page estimateFittedNodeSize uses max width and max height across all pages and limits are 1000x800', () => {
+  assert.equal(MAX_NODE_WIDTH, 1000)
+  assert.equal(MAX_NODE_HEIGHT, 800)
+
+  // Page 1: wide single line; Page 2: narrow 4 lines
+  const page1 = '<div>这是一行非常宽的第一页横向标题文本内容用于测试多页最大宽度包络计算</div>'
+  const page2 = '<div>短行一</div><div>短行二</div><div>短行三</div><div>短行四</div>'
+  const multiPageHtml = `${page1}<hr data-pl-page-break="true">${page2}`
+
+  const sizePage1Only = estimateFittedNodeSize(
+    { id: 'n1', parentIds: [], content: { kind: 'text', richText: page1 }, layout: { x: 0, y: 0, collapsed: false } },
+    FALLBACK_DOCUMENT_DEFAULTS,
+  )
+  const sizePage2Only = estimateFittedNodeSize(
+    { id: 'n2', parentIds: [], content: { kind: 'text', richText: page2 }, layout: { x: 0, y: 0, collapsed: false } },
+    FALLBACK_DOCUMENT_DEFAULTS,
+  )
+  const sizeMulti = estimateFittedNodeSize(
+    { id: 'n3', parentIds: [], content: { kind: 'text', richText: multiPageHtml }, layout: { x: 0, y: 0, collapsed: false } },
+    FALLBACK_DOCUMENT_DEFAULTS,
+  )
+
+  assert.ok(sizePage1Only !== null && sizePage2Only !== null && sizeMulti !== null)
+  assert.equal(sizeMulti.width, Math.max(sizePage1Only.width, sizePage2Only.width))
+  assert.ok(sizeMulti.height > sizePage2Only.height)
+})
+

@@ -2,7 +2,7 @@ import { escapeHtmlText } from '@/shared/lib/html'
 import { BLOCK_TAG_PATTERN, cleanBrowserArtifacts } from './markdownClean'
 import { escapeMarkdownSourceChars } from './markdownEscapes'
 
-const BLOCK_TOKEN_AT_LINE_START = /^(?:#{1,3}|>|[-*]|\d+\.)[ \u00A0]/u
+const BLOCK_TOKEN_AT_LINE_START = /^(?:(?:#{1,3}|>|[-*]|\d+\.)[ \u00A0]|-{3,}[\s\u00A0]*$)/u
 
 export function splitNodesAtBr(nodes: readonly Node[]): Node[][] {
   const segments: Node[][] = [[]]
@@ -61,7 +61,7 @@ function revertInlineMarkdownElements(root: HTMLElement): void {
   })
 }
 
-/** 无结构前缀的行若以块级语法 token 开头，转义其中的标点以免被重新编译成标题/列表 */
+/** 无结构前缀的行若以块级语法 token 开头，转义其中的标点以免被重新编译成标题/列表/分页 */
 function escapeLeadingBlockToken(div: HTMLElement): void {
   const textNode = firstLeadingTextNode(div)
   if (textNode === null) return
@@ -101,7 +101,9 @@ function collectEditableLines(container: Node, lines: string[]): void {
       flushBuffer()
       const tag = child.tagName.toUpperCase()
       const childNodes = Array.from(child.childNodes)
-      if (tag === 'PRE') {
+      if (tag === 'HR') {
+        lines.push('---')
+      } else if (tag === 'PRE') {
         lines.push('```', ...(child.textContent ?? '').split(/\r?\n/u).map(escapeHtmlText), '```')
       } else if (/^H[1-6]$/u.test(tag)) {
         serializeNodesSplittingBr(childNodes, `${'#'.repeat(Math.min(3, Math.max(1, Number(tag.slice(1)))))} `, lines)

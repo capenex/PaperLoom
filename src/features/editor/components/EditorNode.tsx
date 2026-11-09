@@ -18,6 +18,7 @@ import type {
 } from '@/shared/types/paper'
 import type { Point } from '../data/layout'
 import { cardHandlers } from '../lib/cardInteraction'
+import { splitRichTextPages } from '../lib/markdownRichText'
 import { plainTextFromHtml } from '../lib/richText'
 import { FileNodeBody, NodeBadge, TitleNodeBody } from './StaticNodeBodies'
 
@@ -100,24 +101,127 @@ function dragClassName(dragging: boolean, dropTarget: boolean, detachHint: boole
   return dropTarget ? 'ring-2 ring-emerald-500 ring-offset-2' : ''
 }
 
+function NodePageTurnControls({
+  pageIndex,
+  pageCount,
+  onPrev,
+  onNext,
+}: Readonly<{
+  pageIndex: number
+  pageCount: number
+  onPrev: () => void
+  onNext: () => void
+}>) {
+  return (
+    <div
+      role="group"
+      aria-label="节点翻页"
+      className="absolute right-2.5 bottom-1.5 z-20 flex items-center gap-0.5 rounded-md border border-slate-200/90 bg-white/95 px-1 py-0.5 text-[11px] font-medium text-slate-600 shadow-2xs backdrop-blur-xs select-none"
+    >
+      <button
+        type="button"
+        aria-label="上一页"
+        disabled={pageIndex <= 0}
+        className="flex size-4 cursor-pointer items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35"
+        onPointerDown={(event) => {
+          event.stopPropagation()
+        }}
+        onDoubleClick={(event) => {
+          event.stopPropagation()
+        }}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPrev()
+        }}
+      >
+        ‹
+      </button>
+      <span className="px-1 font-mono text-[10px] tabular-nums text-slate-500">
+        {pageIndex + 1}/{pageCount}
+      </span>
+      <button
+        type="button"
+        aria-label="下一页"
+        disabled={pageIndex >= pageCount - 1}
+        className="flex size-4 cursor-pointer items-center justify-center rounded text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35"
+        onPointerDown={(event) => {
+          event.stopPropagation()
+        }}
+        onDoubleClick={(event) => {
+          event.stopPropagation()
+        }}
+        onClick={(event) => {
+          event.stopPropagation()
+          onNext()
+        }}
+      >
+        ›
+      </button>
+    </div>
+  )
+}
+
 function TextNodeBody({ content, fontSize }: Readonly<TextNodeBodyProps>) {
   const richText = content.richText
+  const pages = splitRichTextPages(richText)
+  const [pageIndex, setPageIndex] = useState(0)
+  const [prevPageCount, setPrevPageCount] = useState(pages.length)
+
+  if (pages.length !== prevPageCount) {
+    setPrevPageCount(pages.length)
+    if (pages.length > prevPageCount) {
+      setPageIndex(pages.length - 1)
+    } else if (pageIndex >= pages.length) {
+      setPageIndex(Math.max(0, pages.length - 1))
+    }
+  }
 
   if (richText.trim() === '') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
         <span className="text-xs font-medium text-slate-500">空白节点</span>
-        <span className="text-[11px] text-slate-400">双击编辑 · 支持 # 标题与 $公式$</span>
       </div>
     )
   }
 
+  const safeIndex = Math.min(pageIndex, Math.max(0, pages.length - 1))
+  const currentPageHtml = pages[safeIndex] ?? ''
+  const isMultiPage = pages.length > 1
+
   return (
-    <div
-      className="node-rich-text min-h-0 flex-1 overflow-hidden leading-relaxed text-slate-600"
-      style={{ fontSize }}
-      dangerouslySetInnerHTML={{ __html: richText }}
-    />
+    <>
+      {currentPageHtml.trim() === '' ? (
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 items-center justify-center text-xs text-slate-400',
+            isMultiPage && 'pb-5',
+          )}
+        >
+          当前页空白
+        </div>
+      ) : (
+        <div
+          className={cn(
+            'node-rich-text min-h-0 flex-1 overflow-hidden leading-relaxed text-slate-600',
+            isMultiPage && 'pb-5',
+          )}
+          style={{ fontSize }}
+          dangerouslySetInnerHTML={{ __html: currentPageHtml }}
+        />
+      )}
+      {isMultiPage && (
+        <NodePageTurnControls
+          pageIndex={safeIndex}
+          pageCount={pages.length}
+          onPrev={() => {
+            setPageIndex(Math.max(0, safeIndex - 1))
+          }}
+          onNext={() => {
+            setPageIndex(Math.min(pages.length - 1, safeIndex + 1))
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -186,41 +290,15 @@ function nodeAriaLabel(node: PaperNode, hasSubCanvas: boolean, isHostRoot: boole
       ? '，双击返回上级画布'
       : ''
   if (node.content.kind === 'image') {
-    return `图片节点：${label}，再次点击在右侧展开大图${suffix}`
+    return `图片节点：${label}${suffix}`
   }
   if (node.content.kind === 'title') {
-    return `标题节点：${label}${suffix || '，在顶部工具栏修改文字与绑定事件'}`
+    return `标题节点：${label}${suffix}`
   }
   if (node.content.kind === 'file') {
-    return `静态文件节点：${label}${suffix || '，双击在右侧展开查看全文'}`
+    return `静态文件节点：${label}${suffix}`
   }
-  return `节点：${label}${suffix || '，双击编辑内容'}`
-}
-
-const ALT_DRAG_HINT = '按住 Alt 拖动：拖到节点上成为其子节点，拖到空白处脱离为新根节点'
-const CTRL_FIT_HINT = 'Ctrl+左键自动缩放至贴合内容大小'
-
-function nodeTitle(node: PaperNode, hasSubCanvas: boolean, isHostRoot: boolean): string {
-  const fitSuffix =
-    node.content.kind === 'text' || node.content.kind === 'title' ? `；${CTRL_FIT_HINT}` : ''
-  if (hasSubCanvas) {
-    const editHint = node.content.kind === 'text' ? '（Alt+双击可编辑富文本）' : ''
-    return `双击展开支线画布${editHint}${fitSuffix}；${ALT_DRAG_HINT}`
-  }
-  if (isHostRoot) {
-    const editHint = node.content.kind === 'text' ? '（Alt+双击可编辑富文本）' : ''
-    return `双击返回上级画布${editHint}${fitSuffix}；${ALT_DRAG_HINT}`
-  }
-  if (node.content.kind === 'image') {
-    return `选中后再次点击弹出右栏大图；${ALT_DRAG_HINT}`
-  }
-  if (node.content.kind === 'file') {
-    return `静态文件预览，双击在右侧展开查看全文；${ALT_DRAG_HINT}`
-  }
-  if (node.content.kind === 'title') {
-    return `选中后在顶部栏输入标题与绑定事件${fitSuffix}；${ALT_DRAG_HINT}`
-  }
-  return `双击编辑内容${fitSuffix}；${ALT_DRAG_HINT}`
+  return `节点：${label}${suffix}`
 }
 
 function nodeStyle(width: number, height: number, position: Point, expanded: boolean): CSSProperties {
@@ -271,7 +349,6 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
       tabIndex={0}
       aria-pressed={selected}
       aria-label={nodeAriaLabel(node, hasSubCanvas, isHostRoot) + hiddenSuffix}
-      title={hiddenSuffix + nodeTitle(node, hasSubCanvas, isHostRoot)}
       data-node-id={node.id}
       className={cn(
         cardClassName(

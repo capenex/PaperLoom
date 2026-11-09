@@ -58,6 +58,7 @@ project.json.tmp
 
 # AI Studio 导出专属文件
 .aistudio/
+.env.example
 metadata.json
 bun.lock
 

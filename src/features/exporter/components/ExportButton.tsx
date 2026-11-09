@@ -16,14 +16,14 @@ function StatusIcon({ status, idle: Idle }: Readonly<{ status: ExportStatus; idl
 function ExportHint({ status, message }: Readonly<{ status: ExportStatus; message: string }>) {
   if (status === 'error' && message !== '') {
     return (
-      <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600">
+      <p className="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600 shadow-md">
         {message}
       </p>
     )
   }
   if (status === 'cancelled') {
     return (
-      <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+      <p className="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 shadow-md">
         已取消：未选定文件夹或未允许写入（系统文件夹会被浏览器拦截），可换个文件夹或改用下载 zip
       </p>
     )
@@ -36,34 +36,30 @@ export function ExportButton({ document }: Readonly<{ document: PaperDocument }>
   const busy = status === 'exporting'
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          className="flex-1"
-          disabled={busy}
-          title="选择一个文件夹（如 U 盘）写入离线演示包，双击其中的 index.html 即可展示"
-          onClick={() => {
-            run(document, 'folder')
-          }}
-        >
-          <StatusIcon status={target === 'folder' ? status : 'idle'} idle={Download} />
-          导出文件夹
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          className="flex-1"
-          disabled={busy}
-          title="打包成 .zip 下载，不需要文件夹授权；解压后双击 index.html 即可展示"
-          onClick={() => {
-            run(document, 'zip')
-          }}
-        >
-          <StatusIcon status={target === 'zip' ? status : 'idle'} idle={FileArchive} />
-          下载 zip
-        </Button>
-      </div>
+    <div className="relative flex items-center gap-1.5">
+      <Button
+        size="xs"
+        disabled={busy}
+        title="选择一个文件夹（如 U 盘）写入离线演示包，双击其中的 index.html 即可展示"
+        onClick={() => {
+          run(document, 'folder')
+        }}
+      >
+        <StatusIcon status={target === 'folder' ? status : 'idle'} idle={Download} />
+        导出文件夹
+      </Button>
+      <Button
+        size="xs"
+        variant="secondary"
+        disabled={busy}
+        title="打包成 .zip 下载，不需要文件夹授权；解压后双击 index.html 即可展示"
+        onClick={() => {
+          run(document, 'zip')
+        }}
+      >
+        <StatusIcon status={target === 'zip' ? status : 'idle'} idle={FileArchive} />
+        下载 zip
+      </Button>
       <ExportHint status={status} message={message} />
     </div>
   )

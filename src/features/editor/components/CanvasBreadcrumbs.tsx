@@ -72,7 +72,6 @@ export function CanvasBreadcrumbs({
       <button
         type="button"
         onClick={onPop}
-        title="返回上一级画布 (Esc)"
         className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 font-medium text-slate-700 transition-colors hover:bg-slate-200/80 hover:text-slate-900"
       >
         <ArrowLeft className="size-3.5" aria-hidden="true" />
