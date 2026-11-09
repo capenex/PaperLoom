@@ -9,9 +9,10 @@ export interface ConnectionEdge {
   /** 端点落在隐藏节点上时不画圆点，让进出线与贯通线接成一根 */
   readonly startDot: boolean
   readonly endDot: boolean
+  readonly faded: boolean
 }
 
-/** 隐藏节点内部的水平贯通线：左边缘接进线、右边缘接出线 */
+/** 隐藏节点内部的水平贯通线：仅当两侧都有可见节点时出现，左边缘接进线、右边缘接出线 */
 export interface ConnectionBridge {
   readonly key: string
   readonly y: number
@@ -39,8 +40,16 @@ export function computeConnectionGeometry(
   for (const node of nodes) byId.set(node.id, node)
 
   const edges: ConnectionEdge[] = []
-  const hasIncoming = new Set<NodeId>()
-  const hasOutgoing = new Set<NodeId>()
+  const hasVisibleParent = new Set<NodeId>()
+  const hasVisibleChild = new Set<NodeId>()
+  for (const node of nodes) {
+    for (const parentId of node.parentIds) {
+      const parent = byId.get(parentId)
+      if (parent === undefined) continue
+      if (parent.isHidden !== true) hasVisibleParent.add(node.id)
+      if (node.isHidden !== true) hasVisibleChild.add(parent.id)
+    }
+  }
   for (const node of nodes) {
     const target = positions.get(node.id)
     const childWidth = widths.get(node.id)
@@ -52,6 +61,9 @@ export function computeConnectionGeometry(
       if (parent === undefined || source === undefined || parentWidth === undefined) continue
       const start = { x: source.x + parentWidth / 2, y: source.y }
       const end = { x: target.x - childWidth / 2, y: target.y }
+      const faded =
+        (parent.isHidden === true && (!hasVisibleParent.has(parent.id) || !hasVisibleChild.has(parent.id))) ||
+        (node.isHidden === true && (!hasVisibleParent.has(node.id) || !hasVisibleChild.has(node.id)))
       edges.push({
         key: `${node.id}:${parentId}`,
         path: connectionPath(start, end),
@@ -59,15 +71,14 @@ export function computeConnectionGeometry(
         end,
         startDot: parent.isHidden !== true,
         endDot: node.isHidden !== true,
+        faded,
       })
-      hasOutgoing.add(parentId)
-      hasIncoming.add(node.id)
     }
   }
 
   const bridges: ConnectionBridge[] = []
   for (const node of nodes) {
-    if (node.isHidden !== true || !hasIncoming.has(node.id) || !hasOutgoing.has(node.id)) continue
+    if (node.isHidden !== true || !hasVisibleParent.has(node.id) || !hasVisibleChild.has(node.id)) continue
     const center = positions.get(node.id)
     const width = widths.get(node.id)
     if (center === undefined || width === undefined) continue

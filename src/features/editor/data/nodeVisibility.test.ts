@@ -64,7 +64,7 @@ void test('setNodeHidden returns the same document when nothing changes', () => 
   assert.equal('isHidden' in (setNodeHidden(next, 'b', false).nodes[1] ?? {}), false)
 })
 
-void test('a hidden node bridges only when it has both incoming and outgoing edges', () => {
+void test('a hidden node bridges only when it relays between visible sides', () => {
   const geometry = geometryOf([node('a', []), node('h', ['a'], true), node('c', ['h'])])
   assert.equal(geometry.edges.length, 2)
   assert.deepEqual(geometry.bridges, [{ key: 'h', y: 10, x1: 200, x2: 400 }])
@@ -74,13 +74,48 @@ void test('a hidden node bridges only when it has both incoming and outgoing edg
   assert.equal(intoHidden?.endDot, false)
   assert.equal(outOfHidden?.startDot, false)
   assert.equal(outOfHidden?.endDot, true)
+  assert.equal(intoHidden?.faded, false)
+  assert.equal(outOfHidden?.faded, false)
   assert.equal(intoHidden?.end.x, geometry.bridges[0]?.x1)
   assert.equal(outOfHidden?.start.x, geometry.bridges[0]?.x2)
 
   const leaf = geometryOf([node('a', []), node('h', ['a'], true)])
   assert.equal(leaf.bridges.length, 0)
+  assert.equal(leaf.edges[0]?.faded, true)
   const hiddenRoot = geometryOf([node('h', [], true), node('c', ['h'])])
   assert.equal(hiddenRoot.bridges.length, 0)
+  assert.equal(hiddenRoot.edges[0]?.faded, true)
+})
+
+void test('a hidden node whose parent is also hidden fades its edges even with a visible child', () => {
+  const geometry = geometryOf([node('p', [], true), node('h', ['p'], true), node('c', ['h'])])
+  assert.equal(geometry.edges.length, 2)
+  assert.equal(geometry.bridges.length, 0)
+  assert.equal(geometry.edges.find((edge) => edge.key === 'h:p')?.faded, true)
+  assert.equal(geometry.edges.find((edge) => edge.key === 'c:h')?.faded, true)
+})
+
+void test('toggling isHidden recomputes faded and bridges for the same nodes', () => {
+  const nodes = [node('a', []), node('h', ['a']), node('c', ['h'])]
+  const visible = geometryOf(nodes)
+  assert.equal(visible.edges.every((edge) => !edge.faded), true)
+  assert.equal(visible.bridges.length, 0)
+
+  const hiddenNodes = nodes.map((item) => (item.id === 'h' ? withHiddenFlag(item, true) : item))
+  const hidden = geometryOf(hiddenNodes)
+  assert.equal(hidden.edges.every((edge) => !edge.faded), true)
+  assert.equal(hidden.bridges.length, 1)
+
+  const restored = geometryOf(hiddenNodes.map((item) => (item.id === 'h' ? withHiddenFlag(item, false) : item)))
+  assert.equal(restored.edges.every((edge) => !edge.faded), true)
+  assert.equal(restored.bridges.length, 0)
+
+  const leafNodes = [node('a', []), node('h', ['a'])]
+  const leafVisible = geometryOf(leafNodes)
+  assert.equal(leafVisible.edges[0]?.faded, false)
+  const leafHidden = geometryOf(leafNodes.map((item) => (item.id === 'h' ? withHiddenFlag(item, true) : item)))
+  assert.equal(leafHidden.edges[0]?.faded, true)
+  assert.equal(leafHidden.bridges.length, 0)
 })
 
 void test('a hidden relay with several parents still yields a single bridge', () => {

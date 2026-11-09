@@ -17,7 +17,7 @@ function textNode(id: string, parentIds: readonly string[], richText: string): P
   }
 }
 
-function runPresenter(nodes: readonly PaperNode[]) {
+function runPresenter(nodes: readonly PaperNode[], rootIds: readonly string[] = ['a']) {
   const doc: PaperDocument = {
     meta: {
       id: 'doc-presenter-hidden',
@@ -27,7 +27,7 @@ function runPresenter(nodes: readonly PaperNode[]) {
       updatedAt: '2026-11-09T00:00:00.000Z',
     },
     defaults: FALLBACK_DOCUMENT_DEFAULTS,
-    rootIds: ['a'],
+    rootIds,
     nodes,
   }
   const window = new Window()
@@ -60,4 +60,36 @@ void test('presenter omits hidden cards but keeps their slot and bridges the lin
   const leftOf = (doc: typeof hiddenDoc) =>
     doc.querySelector('[data-node-id="c"]')?.getAttribute('style')
   assert.equal(leftOf(hiddenDoc), leftOf(visibleDoc))
+})
+
+void test('presenter drops edges of hidden nodes missing a visible side but keeps relay lines', () => {
+  const leafDoc = runPresenter([
+    textNode('a', [], '<p>起点</p>'),
+    { ...textNode('h', ['a'], '<p>隐藏叶</p>'), isHidden: true },
+  ])
+  assert.equal(leafDoc.querySelector('[data-node-id="h"]'), null)
+  assert.equal(leafDoc.querySelectorAll('svg.connections path').length, 0)
+  assert.equal(leafDoc.querySelectorAll('svg.connections line').length, 0)
+
+  const rootDoc = runPresenter(
+    [
+      { ...textNode('h', [], '<p>隐藏根</p>'), isHidden: true },
+      textNode('c', ['h'], '<p>终点</p>'),
+    ],
+    ['h'],
+  )
+  assert.ok(rootDoc.querySelector('[data-node-id="c"]'))
+  assert.equal(rootDoc.querySelectorAll('svg.connections path').length, 0)
+  assert.equal(rootDoc.querySelectorAll('svg.connections line').length, 0)
+
+  const mixedDoc = runPresenter([
+    textNode('a', [], '<p>起点</p>'),
+    { ...textNode('h', ['a'], '<p>中继</p>'), isHidden: true },
+    textNode('c', ['h'], '<p>终点</p>'),
+    { ...textNode('d', ['h'], '<p>隐藏叶</p>'), isHidden: true },
+  ])
+  assert.equal(mixedDoc.querySelectorAll('svg.connections path').length, 2)
+  const bridge = mixedDoc.querySelector('svg.connections line')
+  assert.ok(bridge)
+  assert.equal(bridge.getAttribute('y1'), bridge.getAttribute('y2'))
 })

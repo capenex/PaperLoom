@@ -38,13 +38,25 @@ export function EditorConnections({
             stroke="var(--color-primary)"
             strokeWidth={2}
             strokeLinecap="round"
-            opacity={0.42}
+            opacity={edge.faded ? 0.1 : 0.42}
           />
           {edge.startDot && (
-            <circle cx={edge.start.x} cy={edge.start.y} r={3} fill="var(--color-primary)" opacity={0.55} />
+            <circle
+              cx={edge.start.x}
+              cy={edge.start.y}
+              r={3}
+              fill="var(--color-primary)"
+              opacity={edge.faded ? 0.1 : 0.55}
+            />
           )}
           {edge.endDot && (
-            <circle cx={edge.end.x} cy={edge.end.y} r={3} fill="var(--color-primary)" opacity={0.75} />
+            <circle
+              cx={edge.end.x}
+              cy={edge.end.y}
+              r={3}
+              fill="var(--color-primary)"
+              opacity={edge.faded ? 0.1 : 0.75}
+            />
           )}
         </g>
       ))}

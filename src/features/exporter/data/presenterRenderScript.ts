@@ -30,7 +30,7 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     return parts.length > 0 ? parts : [richText]
   }
 
-  // 隐藏节点照常占位但不出卡片；进出线都在时用一段横线把两端接成一根
+  // 隐藏节点照常占位但不出卡片；仅当两侧都有可见节点时用一段横线把两端接成一根
   function isHiddenNode(node) {
     return node.isHidden === true
   }
@@ -115,8 +115,17 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     pathsById = {}
     bridgesById = {}
     cardsById = {}
-    var hasIncoming = {}
-    var hasOutgoing = {}
+    var hasVisibleParent = {}
+    var hasVisibleChild = {}
+    nodes.forEach(function (node) {
+      var parentIds = Array.isArray(node.parentIds) ? node.parentIds : []
+      parentIds.forEach(function (parentId) {
+        var parentNode = nodeById[parentId]
+        if (!parentNode) return
+        if (!isHiddenNode(parentNode)) hasVisibleParent[node.id] = true
+        if (!isHiddenNode(node)) hasVisibleChild[parentId] = true
+      })
+    })
 
     var svg = document.createElementNS(svgNS, 'svg')
     svg.setAttribute('class', 'connections')
@@ -130,6 +139,10 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         var source = positions[parentId]
         var target = positions[node.id]
         if (!parentNode || !source || !target) return
+        var faded =
+          (isHiddenNode(parentNode) && (!hasVisibleParent[parentId] || !hasVisibleChild[parentId])) ||
+          (isHiddenNode(node) && (!hasVisibleParent[node.id] || !hasVisibleChild[node.id]))
+        if (faded) return
         var path = document.createElementNS(svgNS, 'path')
         path.setAttribute(
           'd',
@@ -141,12 +154,10 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         path.setAttribute('opacity', '0.45')
         pathsById[node.id + ':' + parentId] = { path: path, nodeId: node.id, parentId: parentId }
         svg.appendChild(path)
-        hasOutgoing[parentId] = true
-        hasIncoming[node.id] = true
       })
     })
     nodes.forEach(function (node) {
-      if (!isHiddenNode(node) || !hasIncoming[node.id] || !hasOutgoing[node.id]) return
+      if (!isHiddenNode(node) || !hasVisibleParent[node.id] || !hasVisibleChild[node.id]) return
       var line = document.createElementNS(svgNS, 'line')
       line.setAttribute('stroke', '#7c5cbf')
       line.setAttribute('stroke-width', '2')
