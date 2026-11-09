@@ -11,8 +11,14 @@ interface CanvasViewportProps {
   readonly canvasKey?: string
   /** 首次进入该画布时的入口节点 framing 目标 */
   readonly entryTarget?: EntryTarget | null | undefined
-  readonly onBackgroundClick: () => void
+  /** 当前画布舞台尺寸：空白点击坐标反算世界坐标用 */
+  readonly stageSize: { readonly width: number; readonly height: number }
+  readonly onBackgroundClick: (
+    screen: { readonly x: number; readonly y: number },
+    world: { readonly x: number; readonly y: number },
+  ) => void
   readonly onBackgroundContextMenu: () => void
+  readonly onEscape: () => void
   /** 额外的空白点击抑制条件：节点拖动结束后的余波点击不应取消选中 */
   readonly shouldIgnoreBackgroundClick: () => boolean
   readonly children: ReactNode
@@ -23,8 +29,10 @@ export function CanvasViewport({
   focusTarget,
   canvasKey = 'main',
   entryTarget = null,
+  stageSize,
   onBackgroundClick,
   onBackgroundContextMenu,
+  onEscape,
   shouldIgnoreBackgroundClick,
   children,
 }: Readonly<CanvasViewportProps>) {
@@ -37,6 +45,7 @@ export function CanvasViewport({
     onPointerMove,
     onPointerUp,
     shouldIgnoreClick,
+    screenToWorld,
   } = useCanvasViewport(focusTarget, canvasKey, entryTarget)
 
   return (
@@ -51,9 +60,10 @@ export function CanvasViewport({
         panning ? 'cursor-grabbing' : 'cursor-grab',
       )}
       style={gridStyle}
-      onClick={() => {
+      onClick={(event) => {
         if (shouldIgnoreClick() || shouldIgnoreBackgroundClick()) return
-        onBackgroundClick()
+        const world = screenToWorld(event.clientX, event.clientY, stageSize)
+        onBackgroundClick({ x: event.clientX, y: event.clientY }, world ?? { x: 0, y: 0 })
       }}
       onContextMenu={(event) => {
         event.preventDefault()
@@ -61,7 +71,7 @@ export function CanvasViewport({
       }}
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
-        onBackgroundClick()
+        onEscape()
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

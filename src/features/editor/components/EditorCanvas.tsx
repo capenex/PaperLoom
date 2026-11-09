@@ -11,10 +11,12 @@ import type {
   PaperReference,
 } from '@/shared/types/paper'
 import type { AddImageNodeTarget } from '../data/document'
+import { canAddParent } from '../data/document'
 import type { Point } from '../data/layout'
 import { useDocumentLayout } from '../hooks/useDocumentLayout'
 import { useImagePasteDrop } from '../hooks/useImagePasteDrop'
 import { useNodeDrag } from '../hooks/useNodeDrag'
+import type { PendingNodeAction } from '../lib/pendingNodeAction'
 import { CanvasBreadcrumbs } from './CanvasBreadcrumbs'
 import { CanvasViewport } from './CanvasViewport'
 import { EditorStage } from './EditorStage'
@@ -44,6 +46,30 @@ interface EditorCanvasProps {
   readonly onMoveRoot: (nodeId: NodeId, anchor: Point) => void
   readonly onAddParent: (nodeId: NodeId, targetId: NodeId) => void
   readonly onDetachAsRoot: (nodeId: NodeId, anchor: Point) => void
+  readonly pending: PendingNodeAction | null
+  readonly onPendingNodeClick: (nodeId: NodeId) => boolean
+  readonly onPendingBackground: (worldPoint: Point | null) => boolean
+  readonly onPendingCancel: () => void
+}
+
+const EMPTY_TARGETS: ReadonlySet<NodeId> = new Set()
+
+function pendingHint(pending: PendingNodeAction): string {
+  if (pending.kind === 'fit') return '贴合内容：点击一个节点按内容自适应尺寸；右键 / Esc 取消'
+  return pending.sourceId === null
+    ? '结构移动：先点击源节点，再点击目标节点或空白；右键 / Esc 取消'
+    : '结构移动：点击目标节点追加父节点，点击空白按点击处脱离为根；右键 / Esc 取消'
+}
+
+function PendingHintBanner({ pending }: Readonly<{ pending: PendingNodeAction }>) {
+  return (
+    <div
+      aria-live="polite"
+      className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded-lg border border-primary/30 bg-white/95 px-4 py-2 text-xs font-medium text-primary shadow-md"
+    >
+      {pendingHint(pending)}
+    </div>
+  )
 }
 
 function DropHintBanner() {
@@ -78,6 +104,41 @@ function resolveFocusTarget(
   }
 }
 
+/** 待命指令期的点击拦截与合法目标高亮；非待命期原样透传 */
+function pendingInterception(props: Readonly<EditorCanvasProps>, document: PaperDocument) {
+  const pendingSource = props.pending?.kind === 'structure' ? props.pending.sourceId : null
+  const extraDropTargets =
+    pendingSource === null
+      ? EMPTY_TARGETS
+      : new Set(
+          document.nodes
+            .filter((node) => canAddParent(document, pendingSource, node.id))
+            .map((node) => node.id),
+        )
+  const handleSelectNode = (nodeId: NodeId | null): void => {
+    if (nodeId !== null && props.pending !== null && props.onPendingNodeClick(nodeId)) return
+    props.onSelectNode(nodeId)
+  }
+  const handleBackgroundClick = (
+    _screen: { readonly x: number; readonly y: number },
+    world: { readonly x: number; readonly y: number },
+  ): void => {
+    if (props.pending !== null) {
+      props.onPendingBackground(world)
+      return
+    }
+    props.onBackgroundClick()
+  }
+  const handleEscape = (): void => {
+    if (props.pending !== null) {
+      props.onPendingBackground(null)
+      return
+    }
+    props.onBackgroundClick()
+  }
+  return { extraDropTargets, handleSelectNode, handleBackgroundClick, handleEscape }
+}
+
 /** 画布区：装配布局、支线面包屑导航、可平移缩放视口、Alt 拖动结构编辑与图片粘贴/拖入 */
 export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
   const { document } = props
@@ -97,6 +158,8 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
           stageWidth: layout.width,
           stageHeight: layout.height,
         }
+  const { extraDropTargets, handleSelectNode, handleBackgroundClick, handleEscape } =
+    pendingInterception(props, document)
 
   return (
     <div
@@ -104,6 +167,12 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
       onDragOver={imagePasteDrop.onDragOver}
       onDragLeave={imagePasteDrop.onDragLeave}
       onDrop={imagePasteDrop.onDrop}
+      onContextMenuCapture={(event) => {
+        if (props.pending === null) return
+        event.preventDefault()
+        event.stopPropagation()
+        props.onPendingCancel()
+      }}
     >
       {props.breadcrumbs !== undefined &&
         props.breadcrumbs.length > 0 &&
@@ -120,8 +189,10 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
         focusTarget={focusTarget}
         canvasKey={props.activeCanvasId ?? 'main'}
         entryTarget={entryTarget}
+        stageSize={{ width: layout.width, height: layout.height }}
         shouldIgnoreBackgroundClick={drag.shouldSuppressClick}
-        onBackgroundClick={props.onBackgroundClick}
+        onBackgroundClick={handleBackgroundClick}
+        onEscape={handleEscape}
         onBackgroundContextMenu={props.onBackgroundContextMenu}
       >
         <EditorStage
@@ -130,8 +201,11 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
           layout={layout}
           drag={drag}
           stageRef={stageRef}
+          onSelectNode={handleSelectNode}
+          extraDropTargets={extraDropTargets}
         />
       </CanvasViewport>
+      {props.pending !== null && <PendingHintBanner pending={props.pending} />}
       {imagePasteDrop.fileDropping && <DropHintBanner />}
     </div>
   )

@@ -13,6 +13,7 @@ import type { AddImageNodeTarget } from '../data/document'
 import type { Point } from '../data/layout'
 import { useReferencePreview } from '../hooks/useReferencePreview'
 import { findDetailContent } from '../lib/detailContent'
+import type { PendingNodeAction } from '../lib/pendingNodeAction'
 import { DetailPanel } from './DetailPanel'
 import { EditorCanvas } from './EditorCanvas'
 import { ReferencePreviewPopup } from './ReferencePreviewPopup'
@@ -43,6 +44,10 @@ interface EditorProps {
   readonly onMoveRoot: (nodeId: NodeId, anchor: Point) => void
   readonly onAddParent: (nodeId: NodeId, targetId: NodeId) => void
   readonly onDetachAsRoot: (nodeId: NodeId, anchor: Point) => void
+  readonly pending: PendingNodeAction | null
+  readonly onPendingNodeClick: (nodeId: NodeId) => boolean
+  readonly onPendingBackground: (worldPoint: Point | null) => boolean
+  readonly onPendingCancel: () => void
 }
 
 /** 触发预览小窗上的绑定事件（target = 'reference-popup'） */

@@ -46,6 +46,12 @@ export interface CanvasViewportState extends CanvasPanState {
   readonly resetView: () => void
   readonly worldStyle: CSSProperties
   readonly gridStyle: CSSProperties
+  /** 屏幕坐标反算舞台世界坐标；stage 为当前画布舞台尺寸 */
+  readonly screenToWorld: (
+    clientX: number,
+    clientY: number,
+    stage: { readonly width: number; readonly height: number },
+  ) => { readonly x: number; readonly y: number } | null
 }
 
 const INITIAL_VIEW: CanvasView = { zoom: 1, x: 0, y: 0 }
@@ -210,11 +216,30 @@ export function useCanvasViewport(
   const resetView = useCallback(() => {
     setView(INITIAL_VIEW)
   }, [])
+  const screenToWorld = useCallback(
+    (
+      clientX: number,
+      clientY: number,
+      stage: { readonly width: number; readonly height: number },
+    ): { readonly x: number; readonly y: number } | null => {
+      const element = viewportRef.current
+      if (element === null) return null
+      const rect = element.getBoundingClientRect()
+      const localX = clientX - rect.left
+      const localY = clientY - rect.top
+      return {
+        x: (localX - rect.width / 2 - view.x) / view.zoom + stage.width / 2,
+        y: (localY - rect.height / 2 - view.y) / view.zoom + stage.height / 2,
+      }
+    },
+    [view.x, view.y, view.zoom],
+  )
 
   return {
     viewportRef,
     zoom: view.zoom,
     resetView,
+    screenToWorld,
     worldStyle: {
       transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`,
       transformOrigin: 'center center',

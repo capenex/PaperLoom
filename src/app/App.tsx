@@ -55,6 +55,11 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
             (node) => editor.selectedNode?.parentIds.includes(node.id) ?? false,
           )}
           onRemoveParent={editor.removeParent}
+          pending={editor.pending}
+          onArmStructure={() => {
+            editor.armStructure(editor.selectedNode?.id ?? null)
+          }}
+          onArmFit={editor.armFit}
         />
       </div>
       <div className="w-48 shrink-0">
@@ -96,6 +101,10 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onMoveRoot={editor.moveRoot}
         onAddParent={editor.addParent}
         onDetachAsRoot={editor.detachAsRoot}
+        pending={editor.pending}
+        onPendingNodeClick={editor.pendingNodeClick}
+        onPendingBackground={editor.pendingBackground}
+        onPendingCancel={editor.cancelPending}
       />
     </main>
   )

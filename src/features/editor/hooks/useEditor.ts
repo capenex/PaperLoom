@@ -6,6 +6,7 @@ import { useCanvasNavigation } from './useCanvasNavigation'
 import { useDocumentMutations } from './useDocumentMutations'
 import { useEditorSelection } from './useEditorSelection'
 import { useNodeMutations } from './useNodeMutations'
+import { usePendingNodeAction } from './usePendingNodeAction'
 import { useStructureMutations } from './useStructureMutations'
 
 /** 编辑器状态：持有主文档与支线画布导航栈，暴露单节点编辑、事件绑定、结构拖动与文档级操作 */
@@ -48,12 +49,30 @@ export function useEditor() {
     [navigation, selection.setSelectedNodeId, selection.setEditingNodeId, selection.setExpandedMediaNodeId],
   )
 
+  const nodeMutations = useNodeMutations(mutationContext)
+  const documentMutations = useDocumentMutations(mutationContext)
+  const structure = useStructureMutations(mutationContext)
+  const pendingActions = usePendingNodeAction({
+    document: currentSlice,
+    defaults: currentSlice.defaults,
+    addParent: structure.addParent,
+    detachAsRoot: structure.detachAsRoot,
+    updateLayout: nodeMutations.updateLayout,
+    selectNode: selection.setSelectedNodeId,
+  })
+
   return {
     document,
     ...selection,
     ...navigation,
-    ...useNodeMutations(mutationContext),
-    ...useDocumentMutations(mutationContext),
-    ...useStructureMutations(mutationContext),
+    ...nodeMutations,
+    ...documentMutations,
+    ...structure,
+    pending: pendingActions.pending,
+    armStructure: pendingActions.armStructure,
+    armFit: pendingActions.armFit,
+    cancelPending: pendingActions.cancel,
+    pendingNodeClick: pendingActions.handleNodeClick,
+    pendingBackground: pendingActions.handleBackground,
   }
 }

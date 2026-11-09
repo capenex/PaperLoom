@@ -23,6 +23,8 @@ interface EditorStageProps {
   readonly layout: DocumentLayout
   readonly drag: NodeDragControls
   readonly stageRef: RefObject<HTMLDivElement | null>
+  /** 待命结构移动模式下的合法加父目标高亮 */
+  readonly extraDropTargets: ReadonlySet<NodeId>
   readonly activeCanvasId?: CanvasId | null | undefined
   readonly activeHostNodeId?: NodeId | null | undefined
   readonly selectedNodeId: NodeId | null
@@ -43,6 +45,7 @@ interface StageNodesProps {
   readonly defaults: DocumentDefaults
   readonly positions: ReadonlyMap<NodeId, Point>
   readonly drag: NodeDragControls
+  readonly extraDropTargets: ReadonlySet<NodeId>
   readonly activeCanvasId: CanvasId | null
   readonly activeHostNodeId: NodeId | null
   readonly selectedNodeId: NodeId | null
@@ -110,7 +113,7 @@ function StageNodes(props: Readonly<StageNodesProps>) {
             isHostRoot={node.id === props.activeHostNodeId}
             dragging={dragging}
             anyDragging={anyDragging}
-            dropTarget={drag.dropTargetId === node.id}
+            dropTarget={drag.dropTargetId === node.id || props.extraDropTargets.has(node.id)}
             detachHint={dragging && drag.overBlank && node.parentIds.length > 0}
             onSelect={props.onSelectNode}
             onEdit={props.onStartEditing}
