@@ -5,10 +5,12 @@ import { createId } from '@/shared/lib/id'
 import type {
   CanvasId,
   ImageNodeContent,
+  ImageSlideItem,
   NodeContent,
   NodeEventBinding,
   NodeId,
   NodeLayout,
+  PageSwitchMode,
   PaperDocument,
   StaticFileFormat,
 } from '@/shared/types/paper'
@@ -16,12 +18,17 @@ import type { AddImageNodeTarget } from '../data/document'
 import {
   addChildNode,
   addImageNode,
+  addImagePageToNode,
   addSiblingNode,
   applyInCanvas,
   canDeleteNodeInCanvas,
   changeNodeKind,
+  removeActiveImagePageFromNode,
   removeNode,
   removeParentNode,
+  replaceActiveImagePageInNode,
+  switchNodePageInDocument,
+  updateEventActionTarget,
   updateFileNodeContent,
   updateImageNodeContent,
   updateNodeEventsInDocument,
@@ -49,6 +56,9 @@ export interface NodeMutations {
   readonly updateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
   readonly changeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
   readonly updateImage: (nodeId: NodeId, src: string, alt: string) => void
+  readonly replaceImagePage: (nodeId: NodeId, item: ImageSlideItem) => void
+  readonly addImagePages: (nodeId: NodeId, items: readonly ImageSlideItem[]) => void
+  readonly deleteImagePage: (nodeId: NodeId) => void
   readonly updateFile: (
     nodeId: NodeId,
     fileName: string,
@@ -57,6 +67,8 @@ export interface NodeMutations {
   ) => void
   readonly updateLayout: (nodeId: NodeId, patch: Partial<NodeLayout>) => void
   readonly updateEvents: (nodeId: NodeId, events: readonly NodeEventBinding[]) => void
+  readonly switchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
+  readonly bindEventTarget: (nodeId: NodeId, bindingId: string, targetNodeId: NodeId) => void
   readonly setHidden: (nodeId: NodeId, hidden: boolean) => void
 }
 
@@ -214,6 +226,22 @@ function useNodeAssetAndLayoutActions({
     },
     [activeCanvasId, setDocument],
   )
+  const switchNodePage = useCallback(
+    (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => {
+      setDocument((curr) =>
+        switchNodePageInDocument(curr, nodeId, mode, pageIndex, activeCanvasId),
+      )
+    },
+    [activeCanvasId, setDocument],
+  )
+  const bindEventTarget = useCallback(
+    (nodeId: NodeId, bindingId: string, targetNodeId: NodeId) => {
+      setDocument((curr) =>
+        updateEventActionTarget(curr, activeCanvasId, nodeId, bindingId, targetNodeId),
+      )
+    },
+    [activeCanvasId, setDocument],
+  )
   const setHidden = useCallback(
     (nodeId: NodeId, hidden: boolean) => {
       setDocument((curr) =>
@@ -222,7 +250,32 @@ function useNodeAssetAndLayoutActions({
     },
     [activeCanvasId, setDocument],
   )
-  return { updateImage, updateFile, updateLayout, updateEvents, setHidden }
+  return { updateImage, updateFile, updateLayout, updateEvents, switchNodePage, bindEventTarget, setHidden }
+}
+
+function useNodeImagePageActions({
+  activeCanvasId,
+  setDocument,
+}: Readonly<Pick<NodeMutationsOptions, 'activeCanvasId' | 'setDocument'>>) {
+  const replaceImagePage = useCallback(
+    (nodeId: NodeId, item: ImageSlideItem) => {
+      setDocument((curr) => replaceActiveImagePageInNode(curr, nodeId, item, activeCanvasId))
+    },
+    [activeCanvasId, setDocument],
+  )
+  const addImagePages = useCallback(
+    (nodeId: NodeId, items: readonly ImageSlideItem[]) => {
+      setDocument((curr) => addImagePageToNode(curr, nodeId, items, activeCanvasId))
+    },
+    [activeCanvasId, setDocument],
+  )
+  const deleteImagePage = useCallback(
+    (nodeId: NodeId) => {
+      setDocument((curr) => removeActiveImagePageFromNode(curr, nodeId, activeCanvasId))
+    },
+    [activeCanvasId, setDocument],
+  )
+  return { replaceImagePage, addImagePages, deleteImagePage }
 }
 
 /** 文档结构与字段编辑操作（自动作用于当前激活的主画布或支线画布，并同步同源节点） */
@@ -239,5 +292,6 @@ export function useNodeMutations(options: Readonly<NodeMutationsOptions>): NodeM
   )
   const textAndKindActions = useNodeTextAndKindActions(options)
   const assetAndLayoutActions = useNodeAssetAndLayoutActions(options)
-  return { ...insertActions, deleteNode, removeParent, ...textAndKindActions, ...assetAndLayoutActions }
+  const imagePageActions = useNodeImagePageActions(options)
+  return { ...insertActions, deleteNode, removeParent, ...textAndKindActions, ...assetAndLayoutActions, ...imagePageActions }
 }

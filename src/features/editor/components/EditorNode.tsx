@@ -3,6 +3,7 @@ import { memo, useState } from 'react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from 'cn'
 
+import { resolveActiveImageIndex, resolveImageItems } from '@/shared/lib/mediaPages'
 import { EXPANDED_MEDIA_SCALE, resolveNodeSize } from '@/shared/lib/nodeDefaults'
 import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import { findBoundSubCanvasId } from '@/shared/lib/nodeEvents'
@@ -12,6 +13,7 @@ import type {
   ImageNodeContent,
   NodeEventAction,
   NodeId,
+  PageSwitchMode,
   PaperNode,
   PaperReference,
   TextNodeContent,
@@ -43,6 +45,7 @@ interface EditorNodeProps {
   readonly onSelect: (nodeId: NodeId) => void
   readonly onEdit: (nodeId: NodeId) => void
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
+  readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
@@ -53,15 +56,18 @@ interface EditorNodeProps {
 interface NodeBodyProps {
   readonly node: PaperNode
   readonly fontSize: number
+  readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
 }
 
 interface TextNodeBodyProps {
   readonly content: TextNodeContent
   readonly fontSize: number
+  readonly onSwitchPage: (pageIndex: number) => void
 }
 
 interface ImageNodeBodyProps {
   readonly content: ImageNodeContent
+  readonly onSwitchPage: (pageIndex: number) => void
 }
 
 function cardClassName(
@@ -161,20 +167,9 @@ function NodePageTurnControls({
   )
 }
 
-function TextNodeBody({ content, fontSize }: Readonly<TextNodeBodyProps>) {
+function TextNodeBody({ content, fontSize, onSwitchPage }: Readonly<TextNodeBodyProps>) {
   const richText = content.richText
   const pages = splitRichTextPages(richText)
-  const [pageIndex, setPageIndex] = useState(0)
-  const [prevPageCount, setPrevPageCount] = useState(pages.length)
-
-  if (pages.length !== prevPageCount) {
-    setPrevPageCount(pages.length)
-    if (pages.length > prevPageCount) {
-      setPageIndex(pages.length - 1)
-    } else if (pageIndex >= pages.length) {
-      setPageIndex(Math.max(0, pages.length - 1))
-    }
-  }
 
   if (richText.trim() === '') {
     return (
@@ -184,7 +179,10 @@ function TextNodeBody({ content, fontSize }: Readonly<TextNodeBodyProps>) {
     )
   }
 
-  const safeIndex = Math.min(pageIndex, Math.max(0, pages.length - 1))
+  const safeIndex = Math.min(
+    Math.max(content.activePageIndex ?? 0, 0),
+    Math.max(0, pages.length - 1),
+  )
   const currentPageHtml = pages[safeIndex] ?? ''
   const isMultiPage = pages.length > 1
 
@@ -214,10 +212,10 @@ function TextNodeBody({ content, fontSize }: Readonly<TextNodeBodyProps>) {
           pageIndex={safeIndex}
           pageCount={pages.length}
           onPrev={() => {
-            setPageIndex(Math.max(0, safeIndex - 1))
+            onSwitchPage(safeIndex - 1)
           }}
           onNext={() => {
-            setPageIndex(Math.min(pages.length - 1, safeIndex + 1))
+            onSwitchPage(safeIndex + 1)
           }}
         />
       )}
@@ -225,8 +223,11 @@ function TextNodeBody({ content, fontSize }: Readonly<TextNodeBodyProps>) {
   )
 }
 
-function ImageNodeBody({ content }: Readonly<ImageNodeBodyProps>) {
+function ImageNodeBody({ content, onSwitchPage }: Readonly<ImageNodeBodyProps>) {
   const [failed, setFailed] = useState(false)
+  const items = resolveImageItems(content)
+  const activeIndex = resolveActiveImageIndex(content)
+  const isMultiPage = items.length > 1
 
   if (failed || content.src.trim() === '') {
     return (
@@ -243,18 +244,33 @@ function ImageNodeBody({ content }: Readonly<ImageNodeBodyProps>) {
         alt={content.alt}
         draggable={false}
         referrerPolicy="no-referrer"
-        className="h-full w-full object-cover select-none"
+        className={cn('h-full w-full select-none', isMultiPage ? 'object-contain' : 'object-cover')}
         onError={() => {
           setFailed(true)
         }}
       />
+      {isMultiPage && (
+        <NodePageTurnControls
+          pageIndex={activeIndex}
+          pageCount={items.length}
+          onPrev={() => {
+            onSwitchPage(activeIndex - 1)
+          }}
+          onNext={() => {
+            onSwitchPage(activeIndex + 1)
+          }}
+        />
+      )}
     </div>
   )
 }
 
-function NodeBody({ node, fontSize }: Readonly<NodeBodyProps>) {
+function NodeBody({ node, fontSize, onSwitchNodePage }: Readonly<NodeBodyProps>) {
+  const switchToPage = (pageIndex: number): void => {
+    onSwitchNodePage(node.id, 'index', pageIndex)
+  }
   if (node.content.kind === 'image') {
-    return <ImageNodeBody key={node.content.src} content={node.content} />
+    return <ImageNodeBody key={node.content.src} content={node.content} onSwitchPage={switchToPage} />
   }
   if (node.content.kind === 'title') {
     return <TitleNodeBody content={node.content} fontSize={fontSize} />
@@ -262,7 +278,7 @@ function NodeBody({ node, fontSize }: Readonly<NodeBodyProps>) {
   if (node.content.kind === 'file') {
     return <FileNodeBody content={node.content} fontSize={fontSize} />
   }
-  return <TextNodeBody content={node.content} fontSize={fontSize} />
+  return <TextNodeBody content={node.content} fontSize={fontSize} onSwitchPage={switchToPage} />
 }
 
 function nodeAccessibleLabel(node: PaperNode): string {
@@ -365,7 +381,7 @@ export const EditorNode = memo(function EditorNode(props: Readonly<EditorNodePro
       {...handlers}
     >
       <NodeBadge hasSubCanvas={hasSubCanvas} isHostRoot={isHostRoot} />
-      <NodeBody node={node} fontSize={defaults.fontSize} />
+      <NodeBody node={node} fontSize={defaults.fontSize} onSwitchNodePage={props.onSwitchNodePage} />
     </div>
   )
 })

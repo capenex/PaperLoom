@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import type {
   CanvasId,
   DocumentDefaults,
+  ImageSlideItem,
   NodeContent,
   NodeEventBinding,
   NodeId,
@@ -42,7 +43,9 @@ interface EditorToolbarProps {
   readonly onDeleteNode: (nodeId: NodeId) => void
   readonly onChangeNodeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
   readonly onUpdateNodeTitle: (nodeId: NodeId, title: string, subtitle: string) => void
-  readonly onUpdateNodeImage: (nodeId: NodeId, src: string, alt: string) => void
+  readonly onReplaceImagePage: (nodeId: NodeId, item: ImageSlideItem) => void
+  readonly onAddImagePages: (nodeId: NodeId, items: readonly ImageSlideItem[]) => void
+  readonly onDeleteImagePage: (nodeId: NodeId) => void
   readonly onUpdateNodeFile: (
     nodeId: NodeId,
     fileName: string,
@@ -56,6 +59,11 @@ interface EditorToolbarProps {
   readonly parents: readonly PaperNode[]
   readonly onRemoveParent: (nodeId: NodeId, parentId: NodeId) => void
   readonly onSetNodeHidden: (nodeId: NodeId, hidden: boolean) => void
+  readonly watchlistNodeIds: readonly NodeId[]
+  readonly watchlistNodes: readonly PaperNode[]
+  readonly canvasNodes: readonly PaperNode[]
+  readonly onToggleWatchlist: (nodeId: NodeId) => void
+  readonly onArmEventTargetPick: (sourceNodeId: NodeId, bindingId: string) => void
   readonly pending: PendingNodeAction | null
   readonly onArmStructure: () => void
   readonly onArmFit: () => void
@@ -74,10 +82,7 @@ function ActiveRibbonDeck({
   return <HomeRibbonPanel {...panelProps} />
 }
 
-/** PPT / WPS 式双层分类与可折叠编辑栏：顶层常驻分类选项卡与文件下拉菜单，下层按选项卡展示功能区 */
-export function EditorToolbar({
-  brandSlot,
-  rightSlot,
+function toPanelProps({
   selectedNode,
   defaults,
   rootCount,
@@ -90,7 +95,9 @@ export function EditorToolbar({
   onDeleteNode,
   onChangeNodeKind,
   onUpdateNodeTitle,
-  onUpdateNodeImage,
+  onReplaceImagePage,
+  onAddImagePages,
+  onDeleteImagePage,
   onUpdateNodeFile,
   onUpdateLayout,
   onUpdateNodeEvents,
@@ -99,13 +106,16 @@ export function EditorToolbar({
   parents,
   onRemoveParent,
   onSetNodeHidden,
+  watchlistNodeIds,
+  watchlistNodes,
+  canvasNodes,
+  onToggleWatchlist,
+  onArmEventTargetPick,
   pending,
   onArmStructure,
   onArmFit,
-}: Readonly<EditorToolbarProps>) {
-  const [ribbonState, setRibbonState] = useState(INITIAL_RIBBON_STATE)
-
-  const panelProps: RibbonPanelSharedProps = {
+}: EditorToolbarProps): RibbonPanelSharedProps {
+  return {
     selectedNode,
     defaults,
     rootCount,
@@ -118,7 +128,9 @@ export function EditorToolbar({
     onDeleteNode,
     onChangeNodeKind,
     onUpdateNodeTitle,
-    onUpdateNodeImage,
+    onReplaceImagePage,
+    onAddImagePages,
+    onDeleteImagePage,
     onUpdateNodeFile,
     onUpdateLayout,
     onUpdateNodeEvents,
@@ -127,18 +139,29 @@ export function EditorToolbar({
     parents,
     onRemoveParent,
     onSetNodeHidden,
+    watchlistNodeIds,
+    watchlistNodes,
+    canvasNodes,
+    onToggleWatchlist,
+    onArmEventTargetPick,
     pending,
     onArmStructure,
     onArmFit,
   }
+}
+
+/** PPT / WPS 式双层分类与可折叠编辑栏：顶层常驻分类选项卡与文件下拉菜单，下层按选项卡展示功能区 */
+export function EditorToolbar(props: Readonly<EditorToolbarProps>) {
+  const [ribbonState, setRibbonState] = useState(INITIAL_RIBBON_STATE)
+  const panelProps = toPanelProps(props)
 
   return (
     <div className="flex flex-col">
       <RibbonTabBar
         activeTab={ribbonState.activeTab}
         collapsed={ribbonState.collapsed}
-        brandSlot={brandSlot}
-        rightSlot={rightSlot}
+        brandSlot={props.brandSlot}
+        rightSlot={props.rightSlot}
         onSelectTab={(tab) => {
           setRibbonState((prev) => selectRibbonTab(prev, tab))
         }}

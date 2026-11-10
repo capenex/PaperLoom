@@ -2,10 +2,15 @@ import { canAddParent } from '../data/document'
 import type { Point } from '../data/layout'
 import type { NodeId, PaperDocument } from '@/shared/types/paper'
 
-/** 待命指令：结构移动（Alt 等价）两段式，或贴合内容（Ctrl 等价）一段式 */
+/** 待命指令：结构移动（Alt 等价）两段式、贴合内容（Ctrl 等价）一段式，或联动事件点选目标 */
 export type PendingNodeAction =
   | { readonly kind: 'structure'; readonly sourceId: NodeId | null }
   | { readonly kind: 'fit' }
+  | {
+      readonly kind: 'pick-event-target'
+      readonly sourceNodeId: NodeId
+      readonly bindingId: string
+    }
 
 export type StructureDecision =
   | { readonly type: 'pick-source'; readonly nodeId: NodeId }

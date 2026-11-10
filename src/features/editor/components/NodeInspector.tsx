@@ -2,6 +2,7 @@ import { resolveNodeSize } from '@/shared/lib/nodeDefaults'
 import type {
   CanvasId,
   DocumentDefaults,
+  ImageSlideItem,
   NodeContent,
   NodeEventBinding,
   NodeId,
@@ -27,7 +28,9 @@ interface NodeInspectorProps {
   readonly onDelete: (nodeId: NodeId) => void
   readonly onChangeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
   readonly onUpdateTitle: (nodeId: NodeId, title: string, subtitle: string) => void
-  readonly onUpdateImage: (nodeId: NodeId, src: string, alt: string) => void
+  readonly onReplaceImagePage: (nodeId: NodeId, item: ImageSlideItem) => void
+  readonly onAddImagePages: (nodeId: NodeId, items: readonly ImageSlideItem[]) => void
+  readonly onDeleteImagePage: (nodeId: NodeId) => void
   readonly onUpdateFile: (
     nodeId: NodeId,
     fileName: string,
@@ -133,8 +136,14 @@ export function NodeInspector(props: Readonly<NodeInspectorProps>) {
         onUpdateTitle={(title, subtitle) => {
           props.onUpdateTitle(node.id, title, subtitle)
         }}
-        onPickImage={(src, alt) => {
-          props.onUpdateImage(node.id, src, alt)
+        onReplaceImagePage={(item) => {
+          props.onReplaceImagePage(node.id, item)
+        }}
+        onAddImagePages={(items) => {
+          props.onAddImagePages(node.id, items)
+        }}
+        onDeleteImagePage={() => {
+          props.onDeleteImagePage(node.id)
         }}
         onPickFile={(name, format, text) => {
           props.onUpdateFile(node.id, name, format, text)

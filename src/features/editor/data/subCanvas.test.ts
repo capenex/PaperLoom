@@ -32,9 +32,9 @@ void test('default events are bound to text, title, image and file nodes and res
 
   const imageEvents = resolveNodeEvents(imageNode)
   assert.equal(imageEvents.length, 1)
-  assert.equal(imageEvents[0]?.trigger, 'second-click')
+  assert.equal(imageEvents[0]?.trigger, 'double-click')
   assert.equal(imageEvents[0]?.action.type, 'open-detail')
-  assert.equal(findTriggeredEvent(imageNode, 'second-click')?.action.type, 'open-detail')
+  assert.equal(findTriggeredEvent(imageNode, 'double-click')?.action.type, 'open-detail')
 
   doc = changeNodeKind(doc, rootId, 'title')
   const titleNode = doc.nodes.find((n) => n.id === rootId)

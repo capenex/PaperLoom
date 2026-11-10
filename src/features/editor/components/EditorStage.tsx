@@ -7,6 +7,7 @@ import type {
   DocumentDefaults,
   NodeEventAction,
   NodeId,
+  PageSwitchMode,
   PaperDocument,
   PaperNode,
   PaperReference,
@@ -34,6 +35,7 @@ interface EditorStageProps {
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
+  readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onStopEditing: () => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
@@ -54,6 +56,7 @@ interface StageNodesProps {
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
+  readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onOpenReferencePreview: (reference: PaperReference, anchor: HTMLElement) => void
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
@@ -118,6 +121,7 @@ function StageNodes(props: Readonly<StageNodesProps>) {
             onSelect={props.onSelectNode}
             onEdit={props.onStartEditing}
             onFitNodeSize={props.onFitNodeSize}
+            onSwitchNodePage={props.onSwitchNodePage}
             onTriggerEvent={props.onTriggerEvent}
             onOpenReferencePreview={props.onOpenReferencePreview}
             onOpenReferenceDetail={props.onOpenReferenceDetail}

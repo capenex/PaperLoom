@@ -36,6 +36,8 @@ export interface BreadcrumbItem {
   readonly label: string
 }
 
+export type PageSwitchMode = 'first' | 'last' | 'next-loop' | 'prev-loop' | 'index'
+
 /** 节点事件执行动作 */
 export type NodeEventAction =
   | {
@@ -53,6 +55,12 @@ export type NodeEventAction =
     }
   | {
       readonly type: 'return-parent-canvas'
+    }
+  | {
+      readonly type: 'switch-node-page'
+      readonly targetNodeId: NodeId
+      readonly mode: PageSwitchMode
+      readonly pageIndex?: number
     }
 
 /** 绑定在节点上的单条交互事件 */
@@ -73,6 +81,7 @@ export interface TextNodeContent {
   readonly kind: 'text'
   /** 富文本内容（HTML，由编辑器生成） */
   readonly richText: string
+  readonly activePageIndex?: number
 }
 
 /** 纯标题节点内容：以默认样式展示主标题，可配副标题 */
@@ -84,6 +93,13 @@ export interface TitleNodeContent {
   readonly subtitle: string
 }
 
+export interface ImageSlideItem {
+  readonly src: string
+  readonly alt: string
+  readonly naturalWidth?: number
+  readonly naturalHeight?: number
+}
+
 /** 图片节点内容 */
 export interface ImageNodeContent {
   readonly kind: 'image'
@@ -91,6 +107,8 @@ export interface ImageNodeContent {
   readonly src: string
   /** 图片替代文本 */
   readonly alt: string
+  readonly items?: readonly ImageSlideItem[]
+  readonly activeIndex?: number
 }
 
 /** 静态文件展示格式：Markdown 文档或源代码/纯文本 */
@@ -210,6 +228,7 @@ export interface PaperDocument {
   readonly defaults: DocumentDefaults
   /** 支线子画布字典（按 canvasId 索引） */
   readonly subCanvases?: Readonly<Record<CanvasId, SubCanvas>>
+  readonly watchlistNodeIds?: readonly NodeId[]
 }
 
 // ============================================================================

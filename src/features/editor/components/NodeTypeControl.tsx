@@ -1,18 +1,20 @@
 import { useRef } from 'react'
 import type { ChangeEvent } from 'react'
-import { FileCode, FileText, Heading, Image, ImagePlus, Pencil } from 'lucide-react'
+import { FileCode, FileText, Heading, Image, Pencil } from 'lucide-react'
 import { cn } from 'cn'
 
 import { Button } from '@/shared/components/ui/button'
-import type { NodeContent, StaticFileFormat } from '@/shared/types/paper'
-import { INBOX_SAVE_FAILED, saveImageFileToInbox } from '../lib/inboxUpload'
+import type { ImageSlideItem, NodeContent, StaticFileFormat } from '@/shared/types/paper'
 import { detectStaticFileFormat } from '../lib/staticMarkdown'
+import { ImagePageControls } from './ImagePageControls'
 
 interface NodeTypeControlProps {
   readonly content: NodeContent | undefined
   readonly onChangeKind: (kind: NodeContent['kind']) => void
   readonly onUpdateTitle: (title: string, subtitle: string) => void
-  readonly onPickImage: (src: string, alt: string) => void
+  readonly onReplaceImagePage: (item: ImageSlideItem) => void
+  readonly onAddImagePages: (items: readonly ImageSlideItem[]) => void
+  readonly onDeleteImagePage: () => void
   readonly onPickFile: (fileName: string, format: StaticFileFormat, text: string) => void
   readonly onEditText?: () => void
 }
@@ -21,11 +23,6 @@ interface NodeKindButtonsProps {
   readonly kind: NodeContent['kind'] | undefined
   readonly disabled: boolean
   readonly onChangeKind: (kind: NodeContent['kind']) => void
-}
-
-interface ReplaceImageButtonProps {
-  readonly altText: string
-  readonly onPickImage: (src: string, alt: string) => void
 }
 
 interface PickStaticFileButtonProps {
@@ -142,52 +139,6 @@ function InlineTitleInputs({
   )
 }
 
-function ReplaceImageButton({ altText, onPickImage }: Readonly<ReplaceImageButtonProps>) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.target.files?.[0] ?? null
-    event.target.value = ''
-    if (file === null) return
-    void saveImageFileToInbox(file)
-      .then((content) => {
-        onPickImage(content.src, content.alt)
-      })
-      .catch(() => {
-        window.alert(INBOX_SAVE_FAILED)
-      })
-  }
-
-  return (
-    <div className="flex h-8 items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 border-slate-200/90 bg-white px-3 text-[13px] text-slate-700 shadow-2xs hover:bg-slate-50"
-        onClick={() => {
-          fileInputRef.current?.click()
-        }}
-      >
-        <ImagePlus className="size-4 text-primary" aria-hidden="true" />
-        更换图片
-      </Button>
-      <span className="max-w-44 truncate text-xs text-slate-400">
-        {altText || '未命名图片'}
-      </span>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        tabIndex={-1}
-        aria-hidden="true"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-    </div>
-  )
-}
-
 function PickStaticFileButton({ fileName, onPickFile }: Readonly<PickStaticFileButtonProps>) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -236,7 +187,9 @@ export function NodeTypeControl({
   content,
   onChangeKind,
   onUpdateTitle,
-  onPickImage,
+  onReplaceImagePage,
+  onAddImagePages,
+  onDeleteImagePage,
   onPickFile,
   onEditText,
 }: Readonly<NodeTypeControlProps>) {
@@ -280,7 +233,12 @@ export function NodeTypeControl({
         </div>
       )}
       {content?.kind === 'image' && (
-        <ReplaceImageButton altText={content.alt} onPickImage={onPickImage} />
+        <ImagePageControls
+          content={content}
+          onReplaceImagePage={onReplaceImagePage}
+          onAddImagePages={onAddImagePages}
+          onDeleteImagePage={onDeleteImagePage}
+        />
       )}
       {content?.kind === 'file' && (
         <PickStaticFileButton fileName={content.fileName} onPickFile={onPickFile} />

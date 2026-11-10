@@ -25,16 +25,9 @@ export function useMediaExpansion(nodes: readonly PaperNode[]): MediaExpansionSt
   const [expandedMediaNodeId, setExpandedMediaNodeId] = useState<NodeId | null>(null)
   const [detailMediaNodeId, setDetailMediaNodeId] = useState<NodeId | null>(null)
 
-  const expandMediaNode = useCallback(
-    (nodeId: NodeId) => {
-      const kind = findNodeKind(nodes, nodeId)
-      setExpandedMediaNodeId(null)
-      setDetailMediaNodeId((current) =>
-        (kind === 'image' || kind === 'file') && current === nodeId ? current : null,
-      )
-    },
-    [nodes],
-  )
+  const expandMediaNode = useCallback((_nodeId: NodeId) => {
+    setExpandedMediaNodeId(null)
+  }, [])
 
   const openMediaDetail = useCallback(
     (nodeId: NodeId) => {
@@ -48,7 +41,6 @@ export function useMediaExpansion(nodes: readonly PaperNode[]): MediaExpansionSt
 
   const collapseExpandedMedia = useCallback(() => {
     setExpandedMediaNodeId(null)
-    setDetailMediaNodeId(null)
   }, [])
 
   const collapseMediaDetail = useCallback(() => {

@@ -104,6 +104,7 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   }
 
   function closeDetail() {
+    detailImageNodeId = null
     detail.classList.remove('is-open')
   }
 
@@ -116,10 +117,12 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   function openDetail(node) {
     if (!node || !node.content) return
     var c = node.content
+    detailImageNodeId = null
     if (c.kind === 'image' && typeof c.src === 'string') {
       detailImage.src = c.src
       detailImage.alt = typeof c.alt === 'string' ? c.alt : ''
       detailFrame.src = 'about:blank'
+      detailImageNodeId = node.id
       detail.setAttribute('data-mode', 'image')
       detail.classList.add('is-open')
       return
@@ -184,7 +187,6 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
     activeCanvasId = targetCanvasId
     selectedId = null
     expandedId = null
-    closeDetail()
     closeRefPop()
     view = { zoom: 1, x: 0, y: 0 }
     applyView()
@@ -242,6 +244,11 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
     'return-parent-canvas': function () {
       popSubCanvas()
     },
+    'switch-node-page': function (ctx, action) {
+      if (action && action.targetNodeId) {
+        switchNodePage(action.targetNodeId, action.mode, action.pageIndex)
+      }
+    },
   }
   window.PAPERLOOM_ACTION_HANDLERS = ACTION_HANDLERS
   window.PAPERLOOM_ANIMATE = animateElement
@@ -253,12 +260,8 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   }
 
   function selectNode(nodeId) {
-    var prevSelectedId = selectedId
     selectedId = nodeId
     expandedId = null
-    if (nodeId === null || nodeId !== prevSelectedId) {
-      closeDetail()
-    }
     renderState()
   }
 

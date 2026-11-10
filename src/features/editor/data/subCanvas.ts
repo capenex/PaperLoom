@@ -246,3 +246,31 @@ export function canDeleteNodeInCanvas(
   const isRoot = node.parentIds.length === 0
   return !isRoot || slice.rootIds.length > 1
 }
+
+export function updateEventActionTarget(
+  document: PaperDocument,
+  activeCanvasId: CanvasId | null,
+  nodeId: NodeId,
+  bindingId: string,
+  targetNodeId: NodeId,
+): PaperDocument {
+  return applyInCanvas(document, activeCanvasId, (slice) => {
+    const source = slice.nodes.find((node) => node.id === nodeId)
+    if (source === undefined) return slice
+    const events = resolveNodeEvents(source)
+    const binding = events.find((item) => item.id === bindingId)
+    if (binding === undefined || binding.action.type !== 'switch-node-page') return slice
+    const nextEvents = events.map((item): NodeEventBinding => {
+      if (item.id !== bindingId || item.action.type !== 'switch-node-page') return item
+      return { ...item, action: { ...item.action, targetNodeId } }
+    })
+    const nodes = slice.nodes.map((node) =>
+      node.id === nodeId ? { ...node, events: nextEvents } : node,
+    )
+    return {
+      ...slice,
+      meta: { ...slice.meta, updatedAt: new Date().toISOString() },
+      nodes,
+    }
+  })
+}

@@ -22,12 +22,58 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   var bridgesById = {}
   var cardsById = {}
   var nodePageById = {}
+  var pageSwitchersById = {}
+  var detailImageNodeId = null
   var bindCardInteractions = null
 
   function splitRichTextPages(richText) {
     if (typeof richText !== 'string' || richText.trim() === '') return ['']
     var parts = richText.split(/<hr\b[^>]*data-pl-page-break[^>]*>/i)
     return parts.length > 0 ? parts : [richText]
+  }
+
+  function imageItemsOf(content) {
+    if (content.items && content.items.length > 0) return content.items
+    return [{ src: content.src, alt: content.alt }]
+  }
+
+  function imageActiveIndexOf(content, items) {
+    var index = typeof content.activeIndex === 'number' ? content.activeIndex : 0
+    return Math.max(0, Math.min(items.length - 1, index))
+  }
+
+  function appendNodePager(card, onStep) {    var pager = document.createElement('div')
+    pager.className = 'node-pager'
+    pager.setAttribute('role', 'group')
+    pager.setAttribute('aria-label', '节点翻页')
+    ;['pointerdown', 'click', 'dblclick'].forEach(function (evName) {
+      pager.addEventListener(evName, function (ev) {
+        ev.stopPropagation()
+      })
+    })
+    var prev = document.createElement('button')
+    prev.type = 'button'
+    prev.className = 'node-pager-btn'
+    prev.setAttribute('aria-label', '上一页')
+    prev.textContent = '‹'
+    prev.addEventListener('click', function () {
+      onStep(-1)
+    })
+    var label = document.createElement('span')
+    label.className = 'node-pager-label'
+    var next = document.createElement('button')
+    next.type = 'button'
+    next.className = 'node-pager-btn'
+    next.setAttribute('aria-label', '下一页')
+    next.textContent = '›'
+    next.addEventListener('click', function () {
+      onStep(1)
+    })
+    pager.appendChild(prev)
+    pager.appendChild(label)
+    pager.appendChild(next)
+    card.appendChild(pager)
+    return { label: label, prev: prev, next: next }
   }
 
   // 隐藏节点照常占位但不出卡片；仅当两侧都有可见节点时用一段横线把两端接成一根
@@ -115,6 +161,7 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     pathsById = {}
     bridgesById = {}
     cardsById = {}
+    pageSwitchersById = {}
     var hasVisibleParent = {}
     var hasVisibleChild = {}
     nodes.forEach(function (node) {
@@ -199,14 +246,45 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         var media = document.createElement('div')
         media.className = 'node-media'
         var image = document.createElement('img')
-        image.src = content.src
+        var imgItems = imageItemsOf(content)
+        var imgCount = imgItems.length
+        var imgIndex = typeof nodePageById[node.id] === 'number'
+          ? nodePageById[node.id]
+          : imageActiveIndexOf(content, imgItems)
         image.alt = typeof content.alt === 'string' ? content.alt : ''
         image.draggable = false
         media.appendChild(image)
         card.appendChild(media)
+        var imgLabel = null
+        var imgPrev = null
+        var imgNext = null
+        function applyImagePage(nextIdx) {
+          var clamped = Math.max(0, Math.min(imgCount - 1, nextIdx))
+          imgIndex = clamped
+          nodePageById[node.id] = clamped
+          image.src = imgItems[clamped].src
+          if (imgLabel) imgLabel.textContent = (clamped + 1) + '/' + imgCount
+          if (imgPrev) imgPrev.disabled = clamped <= 0
+          if (imgNext) imgNext.disabled = clamped >= imgCount - 1
+          if (detailImageNodeId === node.id) detailImage.src = imgItems[clamped].src
+        }
+        if (imgCount > 1) {
+          var imgPager = appendNodePager(card, function (delta) {
+            applyImagePage(imgIndex + delta)
+          })
+          imgLabel = imgPager.label
+          imgPrev = imgPager.prev
+          imgNext = imgPager.next
+          pageSwitchersById[node.id] = {
+            count: imgCount,
+            current: function () { return imgIndex },
+            apply: applyImagePage,
+          }
+        }
+        applyImagePage(imgIndex)
         var imageLabel = image.alt === '' ? '未命名图片' : image.alt
-        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，再次点击在右侧展开大图' + branchHint)
-        card.title = hasSubCanvas ? '双击展开支线画布；再次点击弹出右栏大图' : '选中后再次点击弹出右栏大图'
+        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，双击在右侧展开大图' + branchHint)
+        card.title = hasSubCanvas ? '双击展开支线画布；双击弹出右栏大图' : '双击弹出右栏大图'
       } else if (content.kind === 'title') {
         var titleBox = document.createElement('div')
         titleBox.className = 'node-title-box'
@@ -266,10 +344,7 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
           rich.style.fontSize = defaultFontSize + 'px'
           card.appendChild(rich)
 
-          var pager = null
-          var pagerPrev = null
-          var pagerLabel = null
-          var pagerNext = null
+          var richPager = null
 
           function renderNodePage(nextIdx) {
             var clamped = Math.max(0, Math.min(pages.length - 1, nextIdx))
@@ -281,45 +356,23 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
               anchor.setAttribute('target', '_blank')
               anchor.setAttribute('rel', 'noopener noreferrer')
             })
-            if (pagerLabel) pagerLabel.textContent = (clamped + 1) + '/' + pages.length
-            if (pagerPrev) pagerPrev.disabled = clamped <= 0
-            if (pagerNext) pagerNext.disabled = clamped >= pages.length - 1
+            if (richPager) {
+              richPager.label.textContent = (clamped + 1) + '/' + pages.length
+              richPager.prev.disabled = clamped <= 0
+              richPager.next.disabled = clamped >= pages.length - 1
+            }
           }
 
           if (pages.length > 1) {
-            pager = document.createElement('div')
-            pager.className = 'node-pager'
-            pager.setAttribute('role', 'group')
-            pager.setAttribute('aria-label', '节点翻页')
-            ;['pointerdown', 'click', 'dblclick'].forEach(function (evName) {
-              pager.addEventListener(evName, function (ev) {
-                ev.stopPropagation()
-              })
-            })
-            pagerPrev = document.createElement('button')
-            pagerPrev.type = 'button'
-            pagerPrev.className = 'node-pager-btn'
-            pagerPrev.setAttribute('aria-label', '上一页')
-            pagerPrev.textContent = '‹'
-            pagerPrev.addEventListener('click', function () {
-              renderNodePage((nodePageById[node.id] || 0) - 1)
+            richPager = appendNodePager(card, function (delta) {
+              renderNodePage((nodePageById[node.id] || 0) + delta)
               if (bindCardInteractions) bindCardInteractions()
             })
-            pagerLabel = document.createElement('span')
-            pagerLabel.className = 'node-pager-label'
-            pagerNext = document.createElement('button')
-            pagerNext.type = 'button'
-            pagerNext.className = 'node-pager-btn'
-            pagerNext.setAttribute('aria-label', '下一页')
-            pagerNext.textContent = '›'
-            pagerNext.addEventListener('click', function () {
-              renderNodePage((nodePageById[node.id] || 0) + 1)
-              if (bindCardInteractions) bindCardInteractions()
-            })
-            pager.appendChild(pagerPrev)
-            pager.appendChild(pagerLabel)
-            pager.appendChild(pagerNext)
-            card.appendChild(pager)
+            pageSwitchersById[node.id] = {
+              count: pages.length,
+              current: function () { return nodePageById[node.id] || 0 },
+              apply: function (nextIdx) { renderNodePage(nextIdx) },
+            }
           }
 
           renderNodePage(nodePageById[node.id] || 0)
@@ -339,6 +392,27 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
 
     if (bindCardInteractions) bindCardInteractions()
   }
+
+  function switchNodePage(nodeId, mode, targetPageIndex) {
+    var driver = pageSwitchersById[nodeId]
+    if (!driver || driver.count <= 1) return
+    var current = driver.current()
+    var next = 0
+    if (mode === 'first') {
+      next = 0
+    } else if (mode === 'last') {
+      next = driver.count - 1
+    } else if (mode === 'next-loop') {
+      next = (current + 1) % driver.count
+    } else if (mode === 'prev-loop') {
+      next = (current - 1 + driver.count) % driver.count
+    } else {
+      var index = typeof targetPageIndex === 'number' ? targetPageIndex : 0
+      next = Math.max(0, Math.min(driver.count - 1, index))
+    }
+    driver.apply(next)
+  }
+  window.PAPERLOOM_SWITCH_NODE_PAGE = switchNodePage
 
   renderStage()
   world.appendChild(stage)

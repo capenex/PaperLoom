@@ -8,7 +8,8 @@ import { nextRootAnchor, stageBoundsShift } from './layout'
 import { SAMPLE_IMAGE } from './nodeContent'
 
 export { changeNodeKind, updateFileNodeContent, updateImageNodeContent, updateTextNodeContent, updateTitleNodeContent } from './nodeContent'
-export { activeCanvasDocument, applyInCanvas, canDeleteNodeInCanvas, ensureSubCanvasForNode, propagateSharedNodeState, updateNodeEventsInDocument } from './subCanvas'
+export { addImagePageToNode, removeActiveImagePageFromNode, replaceActiveImagePageInNode, resolveWatchlistNodes, switchNodePageInDocument, toggleNodeInWatchlist } from './mediaDocument'
+export { activeCanvasDocument, applyInCanvas, canDeleteNodeInCanvas, ensureSubCanvasForNode, propagateSharedNodeState, updateEventActionTarget, updateNodeEventsInDocument } from './subCanvas'
 
 export interface AddImageNodeTarget {
   readonly parentId?: NodeId | null

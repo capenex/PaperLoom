@@ -223,3 +223,46 @@ void test('rewriteDocumentPaths rewrites main canvas and subCanvases back to inb
   assert.ok(subText.includes('href="/res/inbox/666.png"'))
   assert.ok(!subText.includes('./assets/refs/'))
 })
+
+void test('rewriteDocumentPaths rewrites every page of multi-page image nodes back to inbox', () => {
+  const document: PaperDocument = {
+    meta: createFixtureDocument().meta,
+    defaults: FALLBACK_DOCUMENT_DEFAULTS,
+    rootIds: ['img-multi'],
+    nodes: [
+      {
+        id: 'img-multi',
+        parentIds: [],
+        content: {
+          kind: 'image',
+          src: './res/inbox/p2.png',
+          alt: '多页图',
+          activeIndex: 1,
+          items: [
+            { src: './res/inbox/p1.png', alt: '第一页', naturalWidth: 10, naturalHeight: 20 },
+            { src: './res/inbox/p2.png', alt: '第二页', naturalWidth: 30, naturalHeight: 40 },
+            { src: './assets/media/image-9.png', alt: '媒体页' },
+          ],
+        },
+        layout: { x: 0, y: 0, collapsed: false },
+      },
+    ],
+  }
+
+  const pathBySource = new Map<string, string>([
+    ['./res/inbox/p1.png', '/res/inbox/11.png'],
+    ['./res/inbox/p2.png', '/res/inbox/22.png'],
+    ['./assets/media/image-9.png', '/res/inbox/33.png'],
+  ])
+
+  const content = imageContentOf(rewriteDocumentPaths(document, pathBySource).nodes[0])
+  assert.strictEqual(content.src, '/res/inbox/22.png')
+  assert.strictEqual(content.activeIndex, 1)
+  const items = content.items ?? []
+  assert.deepStrictEqual(
+    items.map((item) => item.src),
+    ['/res/inbox/11.png', '/res/inbox/22.png', '/res/inbox/33.png'],
+  )
+  assert.deepStrictEqual(items.map((item) => item.naturalWidth), [10, 30, undefined])
+  assert.deepStrictEqual(items.map((item) => item.naturalHeight), [20, 40, undefined])
+})

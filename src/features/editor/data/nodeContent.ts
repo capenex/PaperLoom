@@ -16,6 +16,7 @@ import type {
   StaticFileFormat,
   TitleNodeContent,
 } from '@/shared/types/paper'
+import { splitRichTextPages } from '../lib/markdownRichText'
 
 /** 初始文档及切换为多媒体节点时默认展示的图片内容 */
 export const SAMPLE_IMAGE: ImageNodeContent = {
@@ -89,6 +90,14 @@ export function updateTextNodeContent(
     target.events !== undefined &&
     !target.events.some((item) => resolveBindingTarget(item) !== 'node')
 
+  const pageCount = splitRichTextPages(richText).length
+  const prevPageCount = splitRichTextPages(target.content.richText).length
+  const prevIndex = target.content.activePageIndex ?? 0
+  const activePageIndex =
+    pageCount > prevPageCount
+      ? pageCount - 1
+      : Math.min(Math.max(prevIndex, 0), pageCount - 1)
+
   const nodes = document.nodes.map((node) => {
     if (node.id !== nodeId) return node
     const events =
@@ -97,7 +106,7 @@ export function updateTextNodeContent(
         : node.events
     return {
       ...node,
-      content: { ...target.content, richText },
+      content: { ...target.content, richText, activePageIndex },
       ...(events === undefined ? {} : { events }),
     }
   })

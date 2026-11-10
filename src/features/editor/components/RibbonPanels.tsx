@@ -5,6 +5,7 @@ import { resolveNodeSize } from '@/shared/lib/nodeDefaults'
 import type {
   CanvasId,
   DocumentDefaults,
+  ImageSlideItem,
   NodeContent,
   NodeEventBinding,
   NodeId,
@@ -33,7 +34,9 @@ export interface RibbonPanelSharedProps {
   readonly onDeleteNode: (nodeId: NodeId) => void
   readonly onChangeNodeKind: (nodeId: NodeId, kind: NodeContent['kind']) => void
   readonly onUpdateNodeTitle: (nodeId: NodeId, title: string, subtitle: string) => void
-  readonly onUpdateNodeImage: (nodeId: NodeId, src: string, alt: string) => void
+  readonly onReplaceImagePage: (nodeId: NodeId, item: ImageSlideItem) => void
+  readonly onAddImagePages: (nodeId: NodeId, items: readonly ImageSlideItem[]) => void
+  readonly onDeleteImagePage: (nodeId: NodeId) => void
   readonly onUpdateNodeFile: (
     nodeId: NodeId,
     fileName: string,
@@ -47,6 +50,11 @@ export interface RibbonPanelSharedProps {
   readonly parents: readonly PaperNode[]
   readonly onRemoveParent: (nodeId: NodeId, parentId: NodeId) => void
   readonly onSetNodeHidden: (nodeId: NodeId, hidden: boolean) => void
+  readonly watchlistNodeIds: readonly NodeId[]
+  readonly watchlistNodes: readonly PaperNode[]
+  readonly canvasNodes: readonly PaperNode[]
+  readonly onToggleWatchlist: (nodeId: NodeId) => void
+  readonly onArmEventTargetPick: (sourceNodeId: NodeId, bindingId: string) => void
   readonly pending: PendingNodeAction | null
   readonly onArmStructure: () => void
   readonly onArmFit: () => void
@@ -133,8 +141,14 @@ function SharedNodeTypeControl({ props }: Readonly<{ props: RibbonPanelSharedPro
           props.onUpdateNodeTitle(selectedNode.id, title, subtitle)
         }
       }}
-      onPickImage={(src, alt) => {
-        if (selectedNode !== undefined) props.onUpdateNodeImage(selectedNode.id, src, alt)
+      onReplaceImagePage={(item) => {
+        if (selectedNode !== undefined) props.onReplaceImagePage(selectedNode.id, item)
+      }}
+      onAddImagePages={(items) => {
+        if (selectedNode !== undefined) props.onAddImagePages(selectedNode.id, items)
+      }}
+      onDeleteImagePage={() => {
+        if (selectedNode !== undefined) props.onDeleteImagePage(selectedNode.id)
       }}
       onPickFile={(name, format, text) => {
         if (selectedNode !== undefined) {
@@ -235,6 +249,11 @@ export function InteractionRibbonPanel(props: Readonly<RibbonPanelSharedProps>) 
       node={selectedNode}
       activeCanvasId={activeCanvasId}
       isHostRoot={isHostRoot}
+      watchlistNodeIds={props.watchlistNodeIds}
+      watchlistNodes={props.watchlistNodes}
+      canvasNodes={props.canvasNodes}
+      onToggleWatchlist={props.onToggleWatchlist}
+      onArmEventTargetPick={props.onArmEventTargetPick}
       onUpdateEvents={(events) => {
         if (selectedNode !== undefined) props.onUpdateNodeEvents(selectedNode.id, events)
       }}

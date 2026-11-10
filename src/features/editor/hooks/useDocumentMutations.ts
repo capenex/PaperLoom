@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react'
 
 import { createId } from '@/shared/lib/id'
 import type { CanvasId, DocumentDefaults, NodeId, PaperDocument } from '@/shared/types/paper'
-import { addRootNode, applyInCanvas, updateDocumentDefaults } from '../data/document'
+import { addRootNode, applyInCanvas, toggleNodeInWatchlist, updateDocumentDefaults } from '../data/document'
 
 interface DocumentMutationsOptions {
   readonly activeCanvasId: CanvasId | null
@@ -16,6 +16,7 @@ interface DocumentMutationsOptions {
 export interface DocumentMutations {
   readonly addRoot: () => void
   readonly updateDefaults: (patch: Partial<DocumentDefaults>) => void
+  readonly toggleWatchlist: (nodeId: NodeId) => void
   /** 用外部载入的文档整体替换当前画布（用于打开工程文件） */
   readonly replaceDocument: (document: PaperDocument) => void
 }
@@ -44,6 +45,13 @@ export function useDocumentMutations({
     [setDocument],
   )
 
+  const toggleWatchlist = useCallback(
+    (nodeId: NodeId) => {
+      setDocument((current) => toggleNodeInWatchlist(current, nodeId))
+    },
+    [setDocument],
+  )
+
   const replaceDocument = useCallback(
     (next: PaperDocument) => {
       setDocument(next)
@@ -54,5 +62,5 @@ export function useDocumentMutations({
     [onResetCanvasStack, setDocument, setSelectedNodeId, setEditingNodeId],
   )
 
-  return { addRoot, updateDefaults, replaceDocument }
+  return { addRoot, updateDefaults, toggleWatchlist, replaceDocument }
 }

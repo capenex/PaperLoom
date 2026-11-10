@@ -3,7 +3,7 @@
  *
  * - 富文本节点默认绑定「双击开始编辑文字」；
  * - 纯标题节点专为触发事件设计，默认无编辑事件（文字直接在顶部栏修改）；
- * - 多媒体节点默认绑定「选中后再次单击弹出大图」；
+ * - 多媒体节点默认绑定「双击弹出大图」；
  * - 静态文件节点默认绑定「双击弹出右侧全文」；
  * - 支线子画布内的同源起点（入口）节点默认绑定「双击返回上级画布」作为出口。
  */
@@ -35,7 +35,7 @@ const DEFAULT_IMAGE_EVENTS: readonly NodeEventBinding[] = [
   {
     id: 'default-image-open-detail',
     target: 'node',
-    trigger: 'second-click',
+    trigger: 'double-click',
     action: { type: 'open-detail' },
   },
 ]

@@ -49,7 +49,9 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
         onDeleteNode={editor.deleteNode}
         onChangeNodeKind={editor.changeKind}
         onUpdateNodeTitle={editor.updateTitle}
-        onUpdateNodeImage={editor.updateImage}
+        onReplaceImagePage={editor.replaceImagePage}
+        onAddImagePages={editor.addImagePages}
+        onDeleteImagePage={editor.deleteImagePage}
         onUpdateNodeFile={editor.updateFile}
         onUpdateLayout={editor.updateLayout}
         onUpdateNodeEvents={editor.updateEvents}
@@ -60,6 +62,11 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
         )}
         onRemoveParent={editor.removeParent}
         onSetNodeHidden={editor.setHidden}
+        watchlistNodeIds={editor.document.watchlistNodeIds ?? []}
+        watchlistNodes={editor.watchlistNodes}
+        canvasNodes={editor.activeDocument.nodes}
+        onToggleWatchlist={editor.toggleWatchlist}
+        onArmEventTargetPick={editor.armEventTargetPick}
         pending={editor.pending}
         onArmStructure={() => {
           editor.armStructure(editor.selectedNode?.id ?? null)
@@ -88,6 +95,7 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onStopEditing={editor.stopEditing}
         onUpdateContent={editor.updateContent}
         onFitNodeSize={editor.updateLayout}
+        onSwitchNodePage={editor.switchNodePage}
         onAddImage={editor.addImage}
         onTriggerEvent={editor.triggerNodeEvent}
         onNavigateCanvas={editor.navigateToCanvas}

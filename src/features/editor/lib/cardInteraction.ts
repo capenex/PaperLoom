@@ -195,7 +195,7 @@ export function cardHandlers(options: Readonly<NodeCardHandlerOptions>): NodeCar
     onClick: (event) => {
       event.stopPropagation()
       if (options.shouldSuppressClick()) return
-      // Ctrl/Cmd + 左键单击富文本节点或标题节点：立即将其宽高缩放到贴合内容的合适尺寸
+      // Ctrl/Cmd + 左键单击富文本、标题或图片节点：立即将其宽高缩放到贴合内容的合适尺寸
       if (event.ctrlKey || event.metaKey) {
         const fitted = fitNodeSize(node, defaults)
         if (fitted !== null) {
@@ -221,7 +221,6 @@ export function cardHandlers(options: Readonly<NodeCardHandlerOptions>): NodeCar
     },
     onContextMenu: (event) => {
       event.preventDefault()
-      event.stopPropagation()
     },
     onKeyDown: (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return

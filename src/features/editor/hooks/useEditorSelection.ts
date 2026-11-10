@@ -29,16 +29,15 @@ export function useEditorSelection(nodes: readonly PaperNode[]): EditorSelection
   const [selectedNodeId, setSelectedNodeId] = useState<NodeId | null>(null)
   const [editingNodeId, setEditingNodeId] = useState<NodeId | null>(null)
   const detail = useDetailSlot(nodes)
-  const { expandMediaNode, collapseExpandedMedia } = detail
+  const { collapseExpandedMedia } = detail
 
   const selectNode = useCallback(
     (nodeId: NodeId | null) => {
       setSelectedNodeId(nodeId)
       setEditingNodeId((current) => (current === nodeId ? current : null))
-      if (nodeId === null) collapseExpandedMedia()
-      else expandMediaNode(nodeId)
+      collapseExpandedMedia()
     },
-    [collapseExpandedMedia, expandMediaNode],
+    [collapseExpandedMedia],
   )
   const startEditing = useCallback(
     (nodeId: NodeId) => {

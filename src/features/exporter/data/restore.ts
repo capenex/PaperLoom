@@ -10,7 +10,7 @@ import { uploadBlobToInbox } from '@/shared/lib/inbox'
 import { parseProjectFile } from '@/shared/lib/projectFile'
 import { REFERENCE_KIND_ATTR, REFERENCE_PREVIEW_ATTR } from '@/shared/lib/reference'
 import { PAPERLOOM_GLOBAL_KEY } from '@/shared/types/export'
-import type { PaperDocument, PaperNode } from '@/shared/types/paper'
+import type { ImageNodeContent, PaperDocument, PaperNode } from '@/shared/types/paper'
 import { PROJECT_FORMAT_VERSION } from '@/shared/types/project'
 
 export interface InlinePdfEntry {
@@ -158,11 +158,22 @@ function rewriteRichTextPaths(
   return changed ? parsed.body.innerHTML : null
 }
 
+function rewriteImageSources(
+  content: ImageNodeContent,
+  pathBySource: ReadonlyMap<string, string>,
+): ImageNodeContent {
+  const src = pathBySource.get(content.src) ?? content.src
+  if (content.items === undefined) return { ...content, src }
+  return {
+    ...content,
+    src,
+    items: content.items.map((item) => ({ ...item, src: pathBySource.get(item.src) ?? item.src })),
+  }
+}
+
 function rewriteNodeSource(node: PaperNode, pathBySource: ReadonlyMap<string, string>): PaperNode {
   if (node.content.kind === 'image') {
-    const mapped = pathBySource.get(node.content.src)
-    if (mapped === undefined) return node
-    return { ...node, content: { ...node.content, src: mapped } }
+    return { ...node, content: rewriteImageSources(node.content, pathBySource) }
   }
   if (node.content.kind === 'text') {
     const rewritten = rewriteRichTextPaths(node.content.richText, pathBySource)

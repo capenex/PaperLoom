@@ -1,9 +1,10 @@
 import { PAPERLOOM_DATA_VERSION, PAPERLOOM_GLOBAL_KEY } from '@/shared/types/export'
 import type { PaperLoomGlobalData } from '@/shared/types/export'
 import { extractInboxRelativePath } from '@/shared/lib/inbox'
+import { resolveImageItems } from '@/shared/lib/mediaPages'
 import { REFERENCE_KIND_ATTR, REFERENCE_PREVIEW_ATTR } from '@/shared/lib/reference'
 import { DEFAULT_PRESENTATION_CONFIG } from '@/shared/types/presentation'
-import type { PaperDocument } from '@/shared/types/paper'
+import type { ImageNodeContent, PaperDocument } from '@/shared/types/paper'
 import { PRESENTER_SCRIPT } from './presenterScript'
 import { PRESENTER_STYLES } from './presenterStyles'
 import { toBase64Script, toClassicLibraryScript, toClassicWorkerScript } from './pdfjsClassic'
@@ -117,9 +118,11 @@ function collectMediaSources(document: PaperDocument): readonly string[] {
   const sources: string[] = []
   for (const node of allNodesOf(document)) {
     if (node.content.kind !== 'image') continue
-    const source = node.content.src
-    if (!shouldWriteMediaFile(source) || sources.includes(source)) continue
-    sources.push(source)
+    for (const item of resolveImageItems(node.content)) {
+      const source = item.src
+      if (!shouldWriteMediaFile(source) || sources.includes(source)) continue
+      sources.push(source)
+    }
   }
   return sources
 }
@@ -205,6 +208,27 @@ function createReferenceAssets(document: PaperDocument): Promise<readonly MediaA
   return Promise.all(sources.map((source, index) => loadReferenceAsset(source, index)))
 }
 
+function rewriteExportedSource(source: string, pathBySource: ReadonlyMap<string, string>): string {
+  const path = pathBySource.get(source)
+  return path === undefined ? source : `./${path}`
+}
+
+function rewriteImageContent(
+  content: ImageNodeContent,
+  pathBySource: ReadonlyMap<string, string>,
+): ImageNodeContent {
+  const src = rewriteExportedSource(content.src, pathBySource)
+  if (content.items === undefined) return { ...content, src }
+  return {
+    ...content,
+    src,
+    items: content.items.map((item) => ({
+      ...item,
+      src: rewriteExportedSource(item.src, pathBySource),
+    })),
+  }
+}
+
 /** 导出包内使用相对路径；data: URL 保持原样，不写入额外文件 */
 function rewriteMediaSources(
   document: PaperDocument,
@@ -219,9 +243,7 @@ function rewriteMediaSources(
 
   return mapAllNodes(document, (node) => {
     if (node.content.kind !== 'image') return node
-    const path = pathBySource.get(node.content.src)
-    if (path === undefined) return node
-    return { ...node, content: { ...node.content, src: `./${path}` } }
+    return { ...node, content: rewriteImageContent(node.content, pathBySource) }
   })
 }
 

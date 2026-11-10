@@ -223,6 +223,7 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
 
   function openRefDetail(ref) {
     closeRefPop()
+    detailImageNodeId = null
     if (ref.kind === 'image') {
       detailImage.src = ref.src
       detailImage.alt = ref.label

@@ -262,7 +262,7 @@ export const PRESENTER_LAYOUT_SCRIPT = `  var COLUMN_GAP = 96
   }
 
   var DEFAULT_IMAGE_EVENTS = [
-    { id: 'default-image-open-detail', target: 'node', trigger: 'second-click', action: { type: 'open-detail' } },
+    { id: 'default-image-open-detail', target: 'node', trigger: 'double-click', action: { type: 'open-detail' } },
   ]
   var DEFAULT_FILE_EVENTS = [
     { id: 'default-file-open-detail', target: 'node', trigger: 'double-click', action: { type: 'open-detail' } },

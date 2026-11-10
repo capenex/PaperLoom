@@ -6,7 +6,7 @@
  */
 
 import { uploadBlobToInbox } from '@/shared/lib/inbox'
-import type { ImageNodeContent } from '@/shared/types/paper'
+import type { ImageNodeContent, ImageSlideItem } from '@/shared/types/paper'
 
 const IMAGE_FILE_NAME_PATTERN = /\.(?:png|jpe?g|webp|gif|svg|avif|bmp)$/iu
 
@@ -97,5 +97,42 @@ export async function saveImageFileToInbox(
     kind: 'image',
     src,
     alt: file.name.trim() === '' ? inboxFileName : file.name,
+  }
+}
+
+function readImageNaturalSize(
+  file: File,
+): Promise<{ naturalWidth: number; naturalHeight: number } | null> {
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const probe = new Image()
+    probe.onload = () => {
+      const size =
+        probe.naturalWidth > 0 && probe.naturalHeight > 0
+          ? { naturalWidth: probe.naturalWidth, naturalHeight: probe.naturalHeight }
+          : null
+      URL.revokeObjectURL(objectUrl)
+      resolve(size)
+    }
+    probe.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(null)
+    }
+    probe.src = objectUrl
+  })
+}
+
+export async function saveImageSlideToInbox(
+  file: File,
+  nowMs = Date.now(),
+): Promise<ImageSlideItem> {
+  const size = await readImageNaturalSize(file)
+  const content = await saveImageFileToInbox(file, nowMs)
+  if (size === null) return { src: content.src, alt: content.alt }
+  return {
+    src: content.src,
+    alt: content.alt,
+    naturalWidth: size.naturalWidth,
+    naturalHeight: size.naturalHeight,
   }
 }

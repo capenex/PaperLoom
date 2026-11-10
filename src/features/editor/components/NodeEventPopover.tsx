@@ -17,6 +17,7 @@ type ActionOptionValue =
   | 'return-parent-canvas'
   | 'open-detail'
   | 'open-reference-preview'
+  | 'switch-node-page'
 
 interface NodeEventPopoverProps {
   readonly kind: NodeContent['kind']
@@ -31,13 +32,14 @@ const SELECT_CLS =
   'min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none'
 
 function actionToOptionValue(action: NodeEventAction): ActionOptionValue {
-  return action.type
+  return isActionOption(action.type) ? action.type : 'open-detail'
 }
 
 function optionValueToAction(
   value: ActionOptionValue,
   existingAction: NodeEventAction,
 ): NodeEventAction {
+  if (value === 'switch-node-page') return existingAction
   if (value === 'edit-node') return { type: 'edit-node' }
   if (value === 'return-parent-canvas') return { type: 'return-parent-canvas' }
   if (value === 'open-detail') return { type: 'open-detail' }
@@ -52,7 +54,8 @@ function isActionOption(val: string): val is ActionOptionValue {
     val === 'open-canvas' ||
     val === 'return-parent-canvas' ||
     val === 'open-detail' ||
-    val === 'open-reference-preview'
+    val === 'open-reference-preview' ||
+    val === 'switch-node-page'
   )
 }
 
@@ -156,6 +159,9 @@ function ActionRow({
         <option value="return-parent-canvas">返回上级画布</option>
         <option value="open-detail">弹出详情视图（大图/PDF/全文）</option>
         <option value="open-reference-preview">弹出引用预览小窗</option>
+        {action.type === 'switch-node-page' && (
+          <option value="switch-node-page">切换目标页码</option>
+        )}
       </select>
       {action.type === 'open-canvas' && (
         <button

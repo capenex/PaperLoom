@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
 
-import type { CanvasId, PaperDocument } from '@/shared/types/paper'
-import { activeCanvasDocument, createInitialDocument } from '../data/document'
+import type { CanvasId, NodeEventAction, NodeId, PaperDocument } from '@/shared/types/paper'
+import {
+  activeCanvasDocument,
+  createInitialDocument,
+  resolveWatchlistNodes,
+} from '../data/document'
 import { useCanvasNavigation } from './useCanvasNavigation'
 import { useDocumentMutations } from './useDocumentMutations'
 import { useEditorSelection } from './useEditorSelection'
@@ -69,7 +73,19 @@ export function useEditor() {
     detachAsRoot: structure.detachAsRoot,
     updateLayout: nodeMutations.updateLayout,
     selectNode: selection.setSelectedNodeId,
+    bindEventTarget: nodeMutations.bindEventTarget,
   })
+
+  const triggerNodeEvent = useCallback(
+    (nodeId: NodeId, action: NodeEventAction) => {
+      if (action.type === 'switch-node-page') {
+        nodeMutations.switchNodePage(action.targetNodeId, action.mode, action.pageIndex)
+        return
+      }
+      navigation.triggerNodeEvent(nodeId, action)
+    },
+    [navigation, nodeMutations],
+  )
 
   return {
     document,
@@ -82,8 +98,11 @@ export function useEditor() {
     pending: pendingActions.pending,
     armStructure: pendingActions.armStructure,
     armFit: pendingActions.armFit,
+    armEventTargetPick: pendingActions.armEventTargetPick,
     cancelPending: pendingActions.cancel,
     pendingNodeClick: pendingActions.handleNodeClick,
     pendingBackground: pendingActions.handleBackground,
+    triggerNodeEvent,
+    watchlistNodes: resolveWatchlistNodes(document),
   }
 }

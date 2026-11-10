@@ -6,6 +6,7 @@ import type {
   ImageNodeContent,
   NodeEventAction,
   NodeId,
+  PageSwitchMode,
   PaperDocument,
   PaperReference,
 } from '@/shared/types/paper'
@@ -33,6 +34,7 @@ interface EditorProps {
   readonly onStopEditing: () => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
+  readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined
@@ -128,6 +130,7 @@ export function Editor(props: Readonly<EditorProps>) {
         onBackgroundContextMenu={() => {
           preview.closePreview()
           props.onCollapseExpandedMedia()
+          props.onCollapseDetail()
         }}
       />
       {detail !== null && <DetailPanel detail={detail} onCollapse={props.onCollapseDetail} />}

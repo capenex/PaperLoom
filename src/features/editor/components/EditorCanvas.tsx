@@ -7,6 +7,7 @@ import type {
   ImageNodeContent,
   NodeEventAction,
   NodeId,
+  PageSwitchMode,
   PaperDocument,
   PaperReference,
 } from '@/shared/types/paper'
@@ -35,6 +36,7 @@ interface EditorCanvasProps {
   readonly onStopEditing: () => void
   readonly onUpdateContent: (nodeId: NodeId, richText: string) => void
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
+  readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined
@@ -43,6 +45,7 @@ interface EditorCanvasProps {
   readonly onOpenReferenceDetail: (reference: PaperReference) => void
   readonly onBackgroundClick: () => void
   readonly onBackgroundContextMenu: () => void
+  readonly onCollapseDetail: () => void
   readonly onMoveRoot: (nodeId: NodeId, anchor: Point) => void
   readonly onAddParent: (nodeId: NodeId, targetId: NodeId) => void
   readonly onDetachAsRoot: (nodeId: NodeId, anchor: Point) => void
@@ -56,6 +59,9 @@ const EMPTY_TARGETS: ReadonlySet<NodeId> = new Set()
 
 function pendingHint(pending: PendingNodeAction): string {
   if (pending.kind === 'fit') return '贴合内容：点击一个节点按内容自适应尺寸；右键 / Esc 取消'
+  if (pending.kind === 'pick-event-target') {
+    return '点击画布上的目标节点以绑定联动；右键 / Esc 取消'
+  }
   return pending.sourceId === null
     ? '结构移动：先点击源节点，再点击目标节点或空白；右键 / Esc 取消'
     : '结构移动：点击目标节点追加父节点，点击空白按点击处脱离为根；右键 / Esc 取消'
@@ -134,6 +140,7 @@ function pendingInterception(props: Readonly<EditorCanvasProps>, document: Paper
       props.onPendingBackground(null)
       return
     }
+    props.onCollapseDetail()
     props.onBackgroundClick()
   }
   return { extraDropTargets, handleSelectNode, handleBackgroundClick, handleEscape }

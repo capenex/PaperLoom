@@ -13,12 +13,14 @@ interface PendingNodeActionOptions {
   readonly detachAsRoot: (nodeId: NodeId, anchor: Point) => void
   readonly updateLayout: (nodeId: NodeId, patch: { width?: number; height?: number }) => void
   readonly selectNode: (nodeId: NodeId) => void
+  readonly bindEventTarget: (sourceNodeId: NodeId, bindingId: string, targetNodeId: NodeId) => void
 }
 
 export interface PendingNodeActionControls {
   readonly pending: PendingNodeAction | null
   readonly armStructure: (selectedId: NodeId | null) => void
   readonly armFit: () => void
+  readonly armEventTargetPick: (sourceNodeId: NodeId, bindingId: string) => void
   readonly cancel: () => void
   /** 待命期点击节点：返回 true 表示已被待命指令消费 */
   readonly handleNodeClick: (nodeId: NodeId) => boolean
@@ -26,7 +28,7 @@ export interface PendingNodeActionControls {
   readonly handleBackground: (worldPoint: Point | null) => boolean
 }
 
-/** 编辑栏两个待命按钮：结构移动（Alt 等价）与贴合内容（Ctrl 等价） */
+/** 编辑栏待命指令：结构移动（Alt 等价）、贴合内容（Ctrl 等价）与联动事件目标点选 */
 export function usePendingNodeAction(
   options: Readonly<PendingNodeActionOptions>,
 ): PendingNodeActionControls {
@@ -49,6 +51,10 @@ export function usePendingNodeAction(
     setPending((current) => (current?.kind === 'fit' ? null : { kind: 'fit' }))
   }, [])
 
+  const armEventTargetPick = useCallback((sourceNodeId: NodeId, bindingId: string) => {
+    setPending({ kind: 'pick-event-target', sourceNodeId, bindingId })
+  }, [])
+
   const handleNodeClick = useCallback(
     (nodeId: NodeId): boolean => {
       if (pending === null) return false
@@ -59,6 +65,11 @@ export function usePendingNodeAction(
           options.updateLayout(nodeId, fitted)
           options.selectNode(nodeId)
         }
+        setPending(null)
+        return true
+      }
+      if (pending.kind === 'pick-event-target') {
+        options.bindEventTarget(pending.sourceNodeId, pending.bindingId, nodeId)
         setPending(null)
         return true
       }
@@ -86,7 +97,7 @@ export function usePendingNodeAction(
   const handleBackground = useCallback(
     (worldPoint: Point | null): boolean => {
       if (pending === null) return false
-      if (pending.kind === 'fit' || worldPoint === null) {
+      if (pending.kind !== 'structure' || worldPoint === null) {
         setPending(null)
         return true
       }
@@ -100,5 +111,13 @@ export function usePendingNodeAction(
     [pending, options],
   )
 
-  return { pending, armStructure, armFit, cancel, handleNodeClick, handleBackground }
+  return {
+    pending,
+    armStructure,
+    armFit,
+    armEventTargetPick,
+    cancel,
+    handleNodeClick,
+    handleBackground,
+  }
 }

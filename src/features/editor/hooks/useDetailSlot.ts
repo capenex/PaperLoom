@@ -21,26 +21,18 @@ export function useDetailSlot(nodes: readonly PaperNode[]): DetailSlotState {
   const {
     expandedMediaNodeId,
     detailMediaNodeId,
-    expandMediaNode: expandMedia,
+    expandMediaNode,
     openMediaDetail: openMedia,
-    collapseExpandedMedia: collapseMedia,
+    collapseExpandedMedia,
     collapseMediaDetail,
     setExpandedMediaNodeId,
   } = useMediaExpansion(nodes)
   const [detailReference, setDetailReference] = useState<PaperReference | null>(null)
 
-  const expandMediaNode = useCallback((nodeId: NodeId) => {
-    setDetailReference(null)
-    expandMedia(nodeId)
-  }, [expandMedia])
   const openMediaDetail = useCallback((nodeId: NodeId) => {
     setDetailReference(null)
     openMedia(nodeId)
   }, [openMedia])
-  const collapseExpandedMedia = useCallback(() => {
-    setDetailReference(null)
-    collapseMedia()
-  }, [collapseMedia])
   const openReferenceDetail = useCallback((reference: PaperReference) => {
     setDetailReference(reference)
     collapseMediaDetail()

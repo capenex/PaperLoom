@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ExternalLink, GitBranch, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { GitBranch, Pencil, Plus, RotateCcw } from 'lucide-react'
 import { cn } from 'cn'
 
 import { Button } from '@/shared/components/ui/button'
@@ -16,49 +16,24 @@ import type {
   NodeContent,
   NodeEventAction,
   NodeEventBinding,
-  NodeEventTarget,
-  NodeEventTrigger,
+  NodeId,
   PaperNode,
 } from '@/shared/types/paper'
+import { EventBindingPane } from './EventBindingPane'
 import { RibbonDivider, RibbonGroup } from './RibbonPrimitives'
-
-type ActionOptionValue =
-  | 'edit-node'
-  | 'open-canvas'
-  | 'return-parent-canvas'
-  | 'open-detail'
-  | 'open-reference-preview'
 
 interface InlineNodeEventEditorProps {
   readonly node: PaperNode | undefined
   readonly activeCanvasId: CanvasId | null
   readonly isHostRoot: boolean
+  readonly watchlistNodeIds: readonly NodeId[]
+  readonly watchlistNodes: readonly PaperNode[]
+  readonly canvasNodes: readonly PaperNode[]
+  readonly onToggleWatchlist: (nodeId: NodeId) => void
+  readonly onArmEventTargetPick: (sourceNodeId: NodeId, bindingId: string) => void
   readonly onUpdateEvents: (events: readonly NodeEventBinding[]) => void
   readonly onEnterSubCanvas: (canvasId: CanvasId) => void
   readonly onEditNodeText: () => void
-}
-
-const SELECT_BOX_CLS =
-  'h-6 cursor-pointer rounded border border-slate-200/90 bg-slate-50/70 px-1.5 text-xs font-semibold text-slate-700 outline-none transition-colors hover:border-slate-300 focus:border-primary disabled:cursor-not-allowed'
-
-const TARGET_LABELS: Readonly<Record<NodeEventTarget, string>> = {
-  node: '节点本身',
-  reference: '引用链接',
-  'reference-popup': '预览小窗',
-}
-
-const TRIGGER_LABELS: Readonly<Record<NodeEventTrigger, string>> = {
-  'double-click': '双击',
-  'second-click': '再次单击',
-  click: '单击',
-}
-
-const ACTION_LABELS: Readonly<Record<ActionOptionValue, string>> = {
-  'edit-node': '编辑内容',
-  'open-canvas': '展开支线',
-  'return-parent-canvas': '返回上级',
-  'open-detail': '弹出详情',
-  'open-reference-preview': '预览小窗',
 }
 
 function isCurrentCanvasEntryBinding(
@@ -105,28 +80,6 @@ function mergeSavedEventsFromCanvas(
   return [...parentEntryBindings, ...cleanedVisible]
 }
 
-function optionValueToAction(
-  value: ActionOptionValue,
-  existingAction: NodeEventAction | undefined,
-): NodeEventAction {
-  if (value === 'edit-node') return { type: 'edit-node' }
-  if (value === 'return-parent-canvas') return { type: 'return-parent-canvas' }
-  if (value === 'open-detail') return { type: 'open-detail' }
-  if (value === 'open-reference-preview') return { type: 'open-reference-preview' }
-  const canvasId =
-    existingAction?.type === 'open-canvas' ? existingAction.canvasId : createId()
-  return { type: 'open-canvas', canvasId }
-}
-
-function isActionOption(val: string): val is ActionOptionValue {
-  return val in ACTION_LABELS
-}
-
-function formatBindingTabLabel(index: number, binding: NodeEventBinding): string {
-  const target = resolveBindingTarget(binding)
-  return `${index + 1}. ${TARGET_LABELS[target]}·${TRIGGER_LABELS[binding.trigger]} → ${ACTION_LABELS[binding.action.type]}`
-}
-
 function createNewNodeBinding(kind: NodeContent['kind']): NodeEventBinding {
   const action: NodeEventAction =
     kind === 'image' || kind === 'file'
@@ -160,17 +113,21 @@ function EventActionColumns({
   disabled,
   hasSubCanvas,
   canEditRichText,
+  watched,
   onAdd,
   onResetDefaults,
   onBindOrEnterBranch,
+  onToggleWatchlist,
   onEditNodeText,
 }: Readonly<{
   disabled: boolean
   hasSubCanvas: boolean
   canEditRichText: boolean
+  watched: boolean
   onAdd: () => void
   onResetDefaults: () => void
   onBindOrEnterBranch: () => void
+  onToggleWatchlist: () => void
   onEditNodeText: () => void
 }>) {
   const btnCls =
@@ -197,203 +154,21 @@ function EventActionColumns({
           编辑文字
         </Button>
       </div>
-    </div>
-  )
-}
-
-function EventBindingTabsRow({
-  events,
-  activeBindingId,
-  onSelectBinding,
-}: Readonly<{
-  events: readonly NodeEventBinding[]
-  activeBindingId: string | null
-  onSelectBinding: (id: string) => void
-}>) {
-  if (events.length === 0) {
-    return (
-      <div className="flex h-8 items-center">
-        <span className="inline-flex h-8 items-center rounded-lg border border-dashed border-slate-200 bg-white/70 px-3 text-[13px] text-slate-400 select-none">
-          暂无绑定事件
-        </span>
-      </div>
-    )
-  }
-
-  return (
-    <div role="tablist" aria-label="当前节点事件列表" className="flex h-8 items-center gap-1.5">
-      {events.map((binding, index) => {
-        const isCurrent = binding.id === activeBindingId
-        return (
-          <button
-            key={binding.id}
-            type="button"
-            role="tab"
-            aria-selected={isCurrent}
-            onClick={() => {
-              onSelectBinding(binding.id)
-            }}
-            className={cn(
-              'inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors',
-              isCurrent
-                ? 'border-primary bg-primary text-white shadow-2xs'
-                : 'border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50',
-            )}
-          >
-            {formatBindingTabLabel(index, binding)}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function TargetAndTriggerSelects({
-  hasBinding,
-  target,
-  trigger,
-  fieldCls,
-  onChangeTarget,
-  onChangeTrigger,
-}: Readonly<{
-  hasBinding: boolean
-  target: NodeEventTarget
-  trigger: NodeEventTrigger
-  fieldCls: string
-  onChangeTarget: (target: NodeEventTarget) => void
-  onChangeTrigger: (trigger: NodeEventTrigger) => void
-}>) {
-  return (
-    <>
-      <label className={fieldCls}>
-        <span className="shrink-0 text-slate-500">触发对象</span>
-        <select
-          aria-label="事件触发对象"
-          disabled={!hasBinding}
-          value={target}
-          onChange={(e) => {
-            const val = e.target.value
-            if (val === 'node' || val === 'reference' || val === 'reference-popup') {
-              onChangeTarget(val)
-            }
-          }}
-          className={SELECT_BOX_CLS}
-        >
-          <option value="node">节点本身</option>
-          <option value="reference">节点内引用链接</option>
-          <option value="reference-popup">引用预览小窗</option>
-        </select>
-      </label>
-
-      <label className={fieldCls}>
-        <span className="shrink-0 text-slate-500">触发时机</span>
-        <select
-          aria-label="事件触发时机"
-          disabled={!hasBinding}
-          value={trigger}
-          onChange={(e) => {
-            const val = e.target.value
-            if (val === 'double-click' || val === 'second-click' || val === 'click') {
-              onChangeTrigger(val)
-            }
-          }}
-          className={SELECT_BOX_CLS}
-        >
-          <option value="double-click">双击</option>
-          {target === 'node' && <option value="second-click">选中后再次单击</option>}
-          <option value="click">单击</option>
-        </select>
-      </label>
-    </>
-  )
-}
-
-function EventBindingFieldsRow({
-  kind,
-  binding,
-  onChangeTarget,
-  onChangeTrigger,
-  onChangeAction,
-  onDelete,
-  onEnterCanvas,
-}: Readonly<{
-  kind: NodeContent['kind'] | undefined
-  binding: NodeEventBinding | undefined
-  onChangeTarget: (target: NodeEventTarget) => void
-  onChangeTrigger: (trigger: NodeEventTrigger) => void
-  onChangeAction: (action: ActionOptionValue) => void
-  onDelete: () => void
-  onEnterCanvas: (canvasId: CanvasId) => void
-}>) {
-  const hasBinding = binding !== undefined
-  const target: NodeEventTarget = binding === undefined ? 'node' : resolveBindingTarget(binding)
-  const trigger: NodeEventTrigger = binding === undefined ? 'double-click' : binding.trigger
-  const actionVal: ActionOptionValue =
-    binding === undefined ? 'open-canvas' : binding.action.type
-  const fieldCls = cn(
-    'flex h-8 items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 text-[13px] font-medium text-slate-700 shadow-2xs',
-    !hasBinding && 'pointer-events-none opacity-45 select-none',
-  )
-
-  return (
-    <div className="flex h-8 items-center gap-2">
-      <TargetAndTriggerSelects
-        hasBinding={hasBinding}
-        target={target}
-        trigger={trigger}
-        fieldCls={fieldCls}
-        onChangeTarget={onChangeTarget}
-        onChangeTrigger={onChangeTrigger}
-      />
-
-      <label className={fieldCls}>
-        <span className="shrink-0 text-slate-500">执行动作</span>
-        <select
-          aria-label="事件执行动作"
-          disabled={!hasBinding}
-          value={actionVal}
-          onChange={(e) => {
-            if (isActionOption(e.target.value)) onChangeAction(e.target.value)
-          }}
-          className={SELECT_BOX_CLS}
-        >
-          {(kind === undefined || kind === 'text' || actionVal === 'edit-node') && (
-            <option value="edit-node">开始编辑节点内容</option>
-          )}
-          <option value="open-canvas">展开支线画布</option>
-          <option value="return-parent-canvas">返回上级画布</option>
-          <option value="open-detail">弹出详情视图（大图/PDF/全文）</option>
-          <option value="open-reference-preview">弹出引用预览小窗</option>
-        </select>
-      </label>
-
-      {binding?.action.type === 'open-canvas' && (
+      <div className="flex h-[70px] flex-col justify-center">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 border-primary/30 bg-primary/10 px-3 text-[13px] font-semibold text-primary hover:bg-primary/15"
-          onClick={() => {
-            if (binding.action.type === 'open-canvas') onEnterCanvas(binding.action.canvasId)
-          }}
+          disabled={disabled}
+          className={cn(
+            btnCls,
+            watched && 'border-primary/40 bg-primary/10 font-semibold text-primary hover:bg-primary/15',
+          )}
+          onClick={onToggleWatchlist}
         >
-          <ExternalLink className="size-4" aria-hidden="true" />
-          进入支线
+          ★ {watched ? '已关注' : '关注'}
         </Button>
-      )}
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        aria-label="删除此事件绑定"
-        disabled={!hasBinding}
-        className="h-8 border-rose-200/80 bg-rose-50/60 px-3 text-[13px] text-rose-600 shadow-2xs hover:border-rose-300 hover:bg-rose-100/70 hover:text-rose-700"
-        onClick={onDelete}
-      >
-        <Trash2 className="size-4" aria-hidden="true" />
-        删除事件
-      </Button>
+      </div>
     </div>
   )
 }
@@ -430,6 +205,7 @@ export function InlineNodeEventEditor(props: Readonly<InlineNodeEventEditorProps
           disabled={node === undefined}
           hasSubCanvas={existingBranch !== undefined}
           canEditRichText={node?.content.kind === 'text'}
+          watched={node !== undefined && props.watchlistNodeIds.includes(node.id)}
           onAdd={() => {
             if (node === undefined) return
             const created = createNewNodeBinding(node.content.kind)
@@ -448,46 +224,26 @@ export function InlineNodeEventEditor(props: Readonly<InlineNodeEventEditorProps
             setSelectedBindingId(created.id)
             onUpdateEvents(nextEvents)
           }}
+          onToggleWatchlist={() => {
+            if (node !== undefined) props.onToggleWatchlist(node.id)
+          }}
           onEditNodeText={onEditNodeText}
         />
       </RibbonGroup>
       <RibbonDivider />
       <RibbonGroup>
-        <div className="flex h-[70px] flex-col justify-between gap-1.5">
-          <EventBindingTabsRow
-            events={events}
-            activeBindingId={activeBinding?.id ?? null}
-            onSelectBinding={setSelectedBindingId}
-          />
-          <EventBindingFieldsRow
-            kind={node?.content.kind}
-            binding={activeBinding}
-            onChangeTarget={(nextTarget) => {
-              if (activeBinding === undefined) return
-              const nextTrigger =
-                nextTarget !== 'node' && activeBinding.trigger === 'second-click'
-                  ? 'click'
-                  : activeBinding.trigger
-              replaceActiveBinding({ target: nextTarget, trigger: nextTrigger })
-            }}
-            onChangeTrigger={(nextTrigger) => {
-              replaceActiveBinding({ trigger: nextTrigger })
-            }}
-            onChangeAction={(nextActionVal) => {
-              if (activeBinding !== undefined) {
-                replaceActiveBinding({
-                  action: optionValueToAction(nextActionVal, activeBinding.action),
-                })
-              }
-            }}
-            onDelete={() => {
-              if (activeBinding !== undefined) {
-                saveVisibleEvents(events.filter((i) => i.id !== activeBinding.id))
-              }
-            }}
-            onEnterCanvas={onEnterSubCanvas}
-          />
-        </div>
+        <EventBindingPane
+          node={node}
+          events={events}
+          activeBinding={activeBinding}
+          canvasNodes={props.canvasNodes}
+          watchlistNodes={props.watchlistNodes}
+          onSelectBinding={setSelectedBindingId}
+          onReplaceBinding={replaceActiveBinding}
+          onSaveVisibleEvents={saveVisibleEvents}
+          onEnterCanvas={onEnterSubCanvas}
+          onArmPick={props.onArmEventTargetPick}
+        />
       </RibbonGroup>
     </div>
   )

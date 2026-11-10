@@ -9,12 +9,14 @@ import type {
   CanvasId,
   DocumentDefaults,
   DocumentMeta,
+  ImageSlideItem,
   NodeContent,
   NodeEventAction,
   NodeEventBinding,
   NodeEventTrigger,
   NodeId,
   NodeLayout,
+  PageSwitchMode,
   PaperDocument,
   PaperNode,
   SubCanvas,
@@ -47,6 +49,24 @@ function isOptionalSize(value: unknown): value is number | undefined {
   return value === undefined || (isFiniteNumber(value) && value > 0)
 }
 
+function isOptionalPageIndex(value: unknown): value is number | undefined {
+  return value === undefined || (isFiniteNumber(value) && Number.isInteger(value) && value >= 0)
+}
+
+function isImageSlideItem(value: unknown): value is ImageSlideItem {
+  if (!isRecord(value)) return false
+  return (
+    isText(value.src) &&
+    isText(value.alt) &&
+    isOptionalSize(value.naturalWidth) &&
+    isOptionalSize(value.naturalHeight)
+  )
+}
+
+function isOptionalImageItems(value: unknown): value is readonly ImageSlideItem[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every(isImageSlideItem))
+}
+
 function isNodeLayout(value: unknown): value is NodeLayout {
   if (!isRecord(value)) return false
   return (
@@ -60,9 +80,16 @@ function isNodeLayout(value: unknown): value is NodeLayout {
 
 function isNodeContent(value: unknown): value is NodeContent {
   if (!isRecord(value)) return false
-  if (value.kind === 'text') return isText(value.richText)
+  if (value.kind === 'text') return isText(value.richText) && isOptionalPageIndex(value.activePageIndex)
   if (value.kind === 'title') return isText(value.title) && isText(value.subtitle)
-  if (value.kind === 'image') return isText(value.src) && isText(value.alt)
+  if (value.kind === 'image') {
+    return (
+      isText(value.src) &&
+      isText(value.alt) &&
+      isOptionalImageItems(value.items) &&
+      isOptionalPageIndex(value.activeIndex)
+    )
+  }
   if (value.kind === 'file') {
     return (
       isText(value.fileName) &&
@@ -86,6 +113,16 @@ function isEventTrigger(value: unknown): value is NodeEventTrigger {
   return value === 'double-click' || value === 'second-click' || value === 'click'
 }
 
+function isPageSwitchMode(value: unknown): value is PageSwitchMode {
+  return (
+    value === 'first' ||
+    value === 'last' ||
+    value === 'next-loop' ||
+    value === 'prev-loop' ||
+    value === 'index'
+  )
+}
+
 function isEventAction(value: unknown): value is NodeEventAction {
   if (!isRecord(value)) return false
   if (
@@ -97,6 +134,13 @@ function isEventAction(value: unknown): value is NodeEventAction {
     return true
   }
   if (value.type === 'open-canvas') return isText(value.canvasId) && value.canvasId.trim() !== ''
+  if (value.type === 'switch-node-page') {
+    return (
+      isText(value.targetNodeId) &&
+      isPageSwitchMode(value.mode) &&
+      isOptionalPageIndex(value.pageIndex)
+    )
+  }
   return false
 }
 
@@ -144,7 +188,18 @@ function isPaperNode(value: unknown): value is PaperNode | LegacyPaperNode {
 /** 旧版纯标题节点注入的占位副标题，载入时清掉 */
 const LEGACY_TITLE_SUBTITLE = '在顶部栏修改标题与绑定事件'
 
-/** 旧存档的单父 parentId 迁移为 parentIds 数组，并清理占位副标题 */
+const LEGACY_IMAGE_EVENT_ID = 'default-image-open-detail'
+
+function upgradeLegacyImageEvents(events: readonly NodeEventBinding[]): readonly NodeEventBinding[] {
+  return events.map((binding): NodeEventBinding => {
+    if (binding.id === LEGACY_IMAGE_EVENT_ID && binding.trigger === 'second-click') {
+      return { ...binding, trigger: 'double-click' }
+    }
+    return binding
+  })
+}
+
+/** 旧存档迁移：单父 parentId 转 parentIds、清理占位副标题、图片默认事件升级为双击 */
 function normalizeNode(node: PaperNode | LegacyPaperNode): PaperNode {
   let normalized: PaperNode
   if ('parentIds' in node) {
@@ -155,6 +210,9 @@ function normalizeNode(node: PaperNode | LegacyPaperNode): PaperNode {
   }
   if (normalized.content.kind === 'title' && normalized.content.subtitle === LEGACY_TITLE_SUBTITLE) {
     return { ...normalized, content: { ...normalized.content, subtitle: '' } }
+  }
+  if (normalized.content.kind === 'image' && normalized.events !== undefined) {
+    return { ...normalized, events: upgradeLegacyImageEvents(normalized.events) }
   }
   return normalized
 }
@@ -200,22 +258,35 @@ function isDocumentDefaults(value: unknown): value is DocumentDefaults {
   )
 }
 
-function toDocument(raw: unknown): PaperDocument | null {
-  if (!isRecord(raw)) return null
-  const { meta, defaults, nodes, rootIds, subCanvases } = raw
-  if (!isDocumentMeta(meta) || !isDocumentDefaults(defaults)) return null
-  if (!Array.isArray(nodes) || !nodes.every(isPaperNode)) return null
-  if (!Array.isArray(rootIds) || !rootIds.every(isText)) return null
-  if (!isOptionalSubCanvases(subCanvases)) return null
-  const normalizedNodes = nodes.map(normalizeNode)
-  if (subCanvases === undefined) {
-    return { meta, defaults, nodes: normalizedNodes, rootIds }
-  }
+function isOptionalWatchlist(value: unknown): value is readonly NodeId[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every(isText))
+}
+
+function normalizeSubCanvases(
+  subCanvases: Readonly<Record<CanvasId, RawSubCanvas>> | undefined,
+): Readonly<Record<CanvasId, SubCanvas>> | undefined {
+  if (subCanvases === undefined) return undefined
   const normalizedSubs: Record<CanvasId, SubCanvas> = {}
   for (const [key, sub] of Object.entries(subCanvases)) {
     normalizedSubs[key] = { ...sub, nodes: sub.nodes.map(normalizeNode) }
   }
-  return { meta, defaults, nodes: normalizedNodes, rootIds, subCanvases: normalizedSubs }
+  return normalizedSubs
+}
+
+function toDocument(raw: unknown): PaperDocument | null {
+  if (!isRecord(raw)) return null
+  const { meta, defaults, nodes, rootIds, subCanvases, watchlistNodeIds } = raw
+  if (!isDocumentMeta(meta) || !isDocumentDefaults(defaults)) return null
+  if (!Array.isArray(nodes) || !nodes.every(isPaperNode)) return null
+  if (!Array.isArray(rootIds) || !rootIds.every(isText)) return null
+  if (!isOptionalSubCanvases(subCanvases)) return null
+  if (!isOptionalWatchlist(watchlistNodeIds)) return null
+  const normalizedNodes = nodes.map(normalizeNode)
+  const normalizedSubs = normalizeSubCanvases(subCanvases)
+  const base: PaperDocument = { meta, defaults, nodes: normalizedNodes, rootIds }
+  const withSubs: PaperDocument =
+    normalizedSubs === undefined ? base : { ...base, subCanvases: normalizedSubs }
+  return watchlistNodeIds === undefined ? withSubs : { ...withSubs, watchlistNodeIds }
 }
 
 /** 校验主画布与所有支线子画布的节点引用关系 */
