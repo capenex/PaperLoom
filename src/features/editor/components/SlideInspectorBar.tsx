@@ -490,7 +490,7 @@ export function SlideInspectorBar(props: Readonly<SlideInspectorBarProps>) {
   return (
     <div className="flex flex-col border-b border-slate-200 bg-slate-50/90">
       <SlideTopHeaderRow {...props} />
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+      <div className="flex h-20 flex-wrap content-start items-center justify-between gap-2 overflow-y-auto px-4 py-2">
         <AddLayerButtonsBar
           onAddText={props.onAddText}
           onTogglePoolPicker={props.onTogglePoolPicker}
@@ -500,7 +500,7 @@ export function SlideInspectorBar(props: Readonly<SlideInspectorBarProps>) {
           onAddShape={props.onAddShape}
           onAddArrow={props.onAddArrow}
         />
-        {props.selectedElement !== undefined && (
+        {props.selectedElement === undefined ? <span className="text-xs text-slate-500">选中图层后在此调整文字、颜色与图层顺序</span> : (
           <SelectedElementControls
             element={props.selectedElement}
             onUpdate={props.onUpdateSelected}
