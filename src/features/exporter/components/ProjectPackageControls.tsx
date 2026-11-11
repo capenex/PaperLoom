@@ -5,46 +5,86 @@ import {
   ChevronDown,
   Download,
   FileArchive,
+  FilePlus2,
   FolderOpen,
+  History,
+  Layers,
   Loader2,
+  Presentation,
+  RefreshCw,
   RotateCcw,
   TriangleAlert,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from 'cn'
 
 import type { PaperDocument } from '@/shared/types/paper'
 import { useExport } from '../hooks/useExport'
-import type { ExportStatus } from '../hooks/useExport'
+import type { ExportStatus, ExportTarget } from '../hooks/useExport'
 import { useRestore } from '../hooks/useRestore'
 import type { RestoreStatus } from '../hooks/useRestore'
 
 interface ProjectPackageControlsProps {
   readonly document: PaperDocument
   readonly onRestoreDocument: (document: PaperDocument) => void
+  readonly filePoolOpen?: boolean | undefined
+  readonly onToggleFilePool?: (() => void) | undefined
+  readonly onOpenNewSlideComposer?: (() => void) | undefined
+  readonly onResetBlankProject?: (() => void) | undefined
 }
 
 const MENU_ITEM_CLASS =
-  'flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-45'
+  'flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-45'
 
-function ExportItemIcon({
+function StatusItemIcon({
   status,
   idle: Idle,
-}: Readonly<{ status: ExportStatus; idle: LucideIcon }>) {
-  if (status === 'exporting') return <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+}: Readonly<{
+  status: ExportStatus | RestoreStatus
+  idle: LucideIcon
+}>) {
+  if (status === 'exporting' || status === 'restoring') {
+    return <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+  }
   if (status === 'success') return <Check className="size-4 text-emerald-600" aria-hidden="true" />
   if (status === 'error') return <TriangleAlert className="size-4 text-red-500" aria-hidden="true" />
   return <Idle className="size-4 text-slate-500" aria-hidden="true" />
 }
 
-function RestoreItemIcon({
-  status,
-  idle: Idle,
-}: Readonly<{ status: RestoreStatus; idle: LucideIcon }>) {
-  if (status === 'restoring') return <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-  if (status === 'success') return <Check className="size-4 text-emerald-600" aria-hidden="true" />
-  if (status === 'error') return <TriangleAlert className="size-4 text-red-500" aria-hidden="true" />
-  return <Idle className="size-4 text-slate-500" aria-hidden="true" />
+interface ToastModel {
+  readonly tone: 'success' | 'warning' | 'error'
+  readonly text: string
+}
+
+function resolveActiveToast(
+  exportStatus: ExportStatus,
+  exportMessage: string,
+  restoreStatus: RestoreStatus,
+  restoreMessage: string,
+): ToastModel | null {
+  if (exportStatus === 'error' && exportMessage !== '') {
+    return { tone: 'error', text: exportMessage }
+  }
+  if (exportStatus === 'cancelled') {
+    return {
+      tone: 'warning',
+      text: '已取消：未选定文件夹或未允许写入，可换个文件夹或改用下载 zip',
+    }
+  }
+  if (exportStatus === 'success') {
+    return { tone: 'success', text: exportMessage === '' ? '导出完成' : exportMessage }
+  }
+  if (restoreStatus === 'error' && restoreMessage !== '') {
+    return { tone: 'error', text: restoreMessage }
+  }
+  if (restoreStatus === 'success') {
+    return {
+      tone: 'success',
+      text: restoreMessage === '' ? '工程已复原并写入 project.json' : restoreMessage,
+    }
+  }
+  return null
 }
 
 function PackageFeedbackToast({
@@ -52,118 +92,176 @@ function PackageFeedbackToast({
   exportMessage,
   restoreStatus,
   restoreMessage,
+  onDismiss,
 }: Readonly<{
   exportStatus: ExportStatus
   exportMessage: string
   restoreStatus: RestoreStatus
   restoreMessage: string
+  onDismiss: () => void
 }>) {
-  if (exportStatus === 'error' && exportMessage !== '') {
-    return (
-      <p className="absolute top-full left-0 z-40 mt-1.5 w-72 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600 shadow-md">
-        {exportMessage}
-      </p>
-    )
-  }
-  if (exportStatus === 'cancelled') {
-    return (
-      <p className="absolute top-full left-0 z-40 mt-1.5 w-72 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 shadow-md">
-        已取消：未选定文件夹或未允许写入，可换个文件夹或改用下载 zip
-      </p>
-    )
-  }
-  if (restoreStatus === 'error' && restoreMessage !== '') {
-    return (
-      <p className="absolute top-full left-0 z-40 mt-1.5 w-72 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-600 shadow-md">
-        {restoreMessage}
-      </p>
-    )
-  }
-  if (restoreStatus === 'success') {
-    return (
-      <p className="absolute top-full left-0 z-40 mt-1.5 flex w-60 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600 shadow-md">
-        <Check className="size-3.5 text-emerald-600" aria-hidden="true" />
-        工程已复原并写入 project.json
-      </p>
-    )
-  }
-  return null
+  const toast = resolveActiveToast(exportStatus, exportMessage, restoreStatus, restoreMessage)
+
+  useEffect(() => {
+    if (toast === null) return undefined
+    const delayMs = toast.tone === 'error' ? 6000 : 3500
+    const timer = window.setTimeout(onDismiss, delayMs)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [toast, onDismiss])
+
+  if (toast === null) return null
+
+  const toneCls =
+    toast.tone === 'error'
+      ? 'border-red-200 bg-red-50 text-red-600'
+      : toast.tone === 'warning'
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+        : 'border-emerald-200 bg-emerald-50/95 text-emerald-700'
+
+  return (
+    <output
+      className={cn(
+        'absolute top-full left-0 z-40 mt-1.5 flex w-72 items-start justify-between gap-2 rounded-lg border px-3 py-2 text-xs leading-5 shadow-md',
+        toneCls,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-1.5">
+        {toast.tone === 'success' && <Check className="size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />}
+        <span className="break-words">{toast.text}</span>
+      </div>
+      <button
+        type="button"
+        aria-label="关闭提示"
+        onClick={onDismiss}
+        className="mt-0.5 shrink-0 cursor-pointer rounded p-0.5 opacity-70 transition-opacity hover:opacity-100"
+      >
+        <X className="size-3.5" aria-hidden="true" />
+      </button>
+    </output>
+  )
 }
 
-function PackageDropdownMenu({
-  busy,
-  exportTarget,
-  exportStatus,
-  restoreStatus,
-  onExportFolder,
-  onExportZip,
-  onRestoreFolder,
-  onRestoreZip,
+interface PackageDropdownMenuProps {
+  readonly busy: boolean
+  readonly filePoolOpen: boolean
+  readonly canQuickSync: boolean
+  readonly exportTarget: ExportTarget
+  readonly exportStatus: ExportStatus
+  readonly restoreStatus: RestoreStatus
+  readonly onToggleFilePool?: (() => void) | undefined
+  readonly onOpenNewSlideComposer?: (() => void) | undefined
+  readonly onExportQuickFolder: () => void
+  readonly onExportFolder: () => void
+  readonly onExportZip: () => void
+  readonly onRestoreFolder: () => void
+  readonly onRestoreZip: () => void
+  readonly onRestoreBackup: () => void
+  readonly onResetBlankProject?: (() => void) | undefined
+}
+
+function MenuQuickToolsSection({
+  filePoolOpen,
+  onToggleFilePool,
+  onOpenNewSlideComposer,
 }: Readonly<{
-  busy: boolean
-  exportTarget: 'folder' | 'zip' | null
-  exportStatus: ExportStatus
-  restoreStatus: RestoreStatus
-  onExportFolder: () => void
-  onExportZip: () => void
-  onRestoreFolder: () => void
-  onRestoreZip: () => void
+  filePoolOpen: boolean
+  onToggleFilePool?: (() => void) | undefined
+  onOpenNewSlideComposer?: (() => void) | undefined
 }>) {
+  if (onToggleFilePool === undefined && onOpenNewSlideComposer === undefined) return null
+  return (
+    <>
+      {onToggleFilePool !== undefined && (
+        <button
+          type="button"
+          role="menuitem"
+          className={cn(MENU_ITEM_CLASS, filePoolOpen && 'bg-primary/8 font-semibold text-primary')}
+          onClick={onToggleFilePool}
+        >
+          <Layers className="size-4 text-primary" aria-hidden="true" />
+          <span className="flex-1">{filePoolOpen ? '关闭文件池' : '打开文件池'}</span>
+          {filePoolOpen && <Check className="size-3.5 text-primary" aria-hidden="true" />}
+        </button>
+      )}
+      {onOpenNewSlideComposer !== undefined && (
+        <button type="button" role="menuitem" className={MENU_ITEM_CLASS} onClick={onOpenNewSlideComposer}>
+          <Presentation className="size-4 text-primary" aria-hidden="true" />
+          <span>新建幻灯片伪图片</span>
+        </button>
+      )}
+      <hr className="my-1 border-slate-100" />
+    </>
+  )
+}
+
+function PackageDropdownMenu(props: Readonly<PackageDropdownMenuProps>) {
+  const {
+    busy,
+    filePoolOpen,
+    canQuickSync,
+    exportTarget,
+    exportStatus,
+    restoreStatus,
+    onToggleFilePool,
+    onOpenNewSlideComposer,
+    onExportQuickFolder,
+    onExportFolder,
+    onExportZip,
+    onRestoreFolder,
+    onRestoreZip,
+    onRestoreBackup,
+    onResetBlankProject,
+  } = props
+
   return (
     <div
       role="menu"
       aria-label="工程文件菜单"
-      className="absolute top-full left-0 z-40 mt-1.5 w-44 rounded-xl border border-slate-200/90 bg-white p-1.5 shadow-lg"
+      className="absolute top-full left-0 z-40 mt-1.5 w-52 rounded-xl border border-slate-200/90 bg-white p-1.5 shadow-lg"
     >
-      <button
-        type="button"
-        role="menuitem"
-        disabled={busy}
-        className={MENU_ITEM_CLASS}
-        onClick={onExportFolder}
-      >
-        <ExportItemIcon
-          status={exportTarget === 'folder' ? exportStatus : 'idle'}
-          idle={Download}
-        />
+      <MenuQuickToolsSection
+        filePoolOpen={filePoolOpen}
+        onToggleFilePool={onToggleFilePool}
+        onOpenNewSlideComposer={onOpenNewSlideComposer}
+      />
+      {canQuickSync && (
+        <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onExportQuickFolder}>
+          <StatusItemIcon status={exportTarget === 'quick-folder' ? exportStatus : 'idle'} idle={RefreshCw} />
+          <span>快速同步导出</span>
+        </button>
+      )}
+      <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onExportFolder}>
+        <StatusItemIcon status={exportTarget === 'folder' ? exportStatus : 'idle'} idle={Download} />
         <span>导出文件夹</span>
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        disabled={busy}
-        className={MENU_ITEM_CLASS}
-        onClick={onExportZip}
-      >
-        <ExportItemIcon
-          status={exportTarget === 'zip' ? exportStatus : 'idle'}
-          idle={FileArchive}
-        />
+      <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onExportZip}>
+        <StatusItemIcon status={exportTarget === 'zip' ? exportStatus : 'idle'} idle={FileArchive} />
         <span>下载 zip</span>
       </button>
-
       <hr className="my-1 border-slate-100" />
-
-      <button
-        type="button"
-        role="menuitem"
-        disabled={busy}
-        className={MENU_ITEM_CLASS}
-        onClick={onRestoreFolder}
-      >
-        <RestoreItemIcon status={restoreStatus} idle={FolderOpen} />
+      <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onRestoreFolder}>
+        <StatusItemIcon status={restoreStatus} idle={FolderOpen} />
         <span>文件夹复原</span>
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        disabled={busy}
-        className={MENU_ITEM_CLASS}
-        onClick={onRestoreZip}
-      >
-        <RestoreItemIcon status={restoreStatus} idle={RotateCcw} />
+      <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onRestoreZip}>
+        <StatusItemIcon status={restoreStatus} idle={RotateCcw} />
         <span>zip 复原</span>
       </button>
+      <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onRestoreBackup}>
+        <StatusItemIcon status={restoreStatus} idle={History} />
+        <span>从备份恢复 (.bak)</span>
+      </button>
+      {onResetBlankProject !== undefined && (
+        <>
+          <hr className="my-1 border-slate-100" />
+          <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onResetBlankProject}>
+            <FilePlus2 className="size-4 text-slate-500" aria-hidden="true" />
+            <span>新建空白工程</span>
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -237,10 +335,25 @@ function HiddenRestoreInputs({
   )
 }
 
-/** 顶栏「开始」选项卡左侧的「文件」下拉菜单：集合导出文件夹、下载 zip、文件夹复原与 zip 复原 */
+function wrapCloseCallback(
+  setOpen: (open: boolean) => void,
+  fn: (() => void) | undefined,
+): (() => void) | undefined {
+  if (fn === undefined) return undefined
+  return () => {
+    setOpen(false)
+    fn()
+  }
+}
+
+/** 顶栏「开始」选项卡左侧的「文件」下拉菜单：集合文件池开关、幻灯片画板、导出/快速同步与工程复原 */
 export function ProjectPackageControls({
   document: paperDocument,
   onRestoreDocument,
+  filePoolOpen = false,
+  onToggleFilePool,
+  onOpenNewSlideComposer,
+  onResetBlankProject,
 }: Readonly<ProjectPackageControlsProps>) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -250,6 +363,10 @@ export function ProjectPackageControls({
   const restoreCtrl = useRestore(onRestoreDocument)
   const busy = exportCtrl.status === 'exporting' || restoreCtrl.status === 'restoring'
 
+  const dismissAllFeedback = (): void => {
+    exportCtrl.dismiss()
+    restoreCtrl.dismiss()
+  }
   useDismissOnOutside(open, containerRef, () => {
     setOpen(false)
   })
@@ -261,13 +378,12 @@ export function ProjectPackageControls({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
+          dismissAllFeedback()
           setOpen((prev) => !prev)
         }}
         className={cn(
           'inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-3 text-[13px] font-semibold whitespace-nowrap transition-colors select-none',
-          open
-            ? 'bg-primary text-white shadow-2xs'
-            : 'bg-primary/10 text-primary hover:bg-primary/15',
+          open ? 'bg-primary text-white shadow-2xs' : 'bg-primary/10 text-primary hover:bg-primary/15',
         )}
       >
         <span>文件</span>
@@ -276,9 +392,17 @@ export function ProjectPackageControls({
       {open && (
         <PackageDropdownMenu
           busy={busy}
+          filePoolOpen={filePoolOpen}
+          canQuickSync={exportCtrl.canQuickSync}
           exportTarget={exportCtrl.target}
           exportStatus={exportCtrl.status}
           restoreStatus={restoreCtrl.status}
+          onToggleFilePool={wrapCloseCallback(setOpen, onToggleFilePool)}
+          onOpenNewSlideComposer={wrapCloseCallback(setOpen, onOpenNewSlideComposer)}
+          onExportQuickFolder={() => {
+            setOpen(false)
+            exportCtrl.run(paperDocument, 'quick-folder')
+          }}
           onExportFolder={() => {
             setOpen(false)
             exportCtrl.run(paperDocument, 'folder')
@@ -295,20 +419,15 @@ export function ProjectPackageControls({
             setOpen(false)
             zipInputRef.current?.click()
           }}
+          onRestoreBackup={() => {
+            setOpen(false)
+            restoreCtrl.restoreFromBackup()
+          }}
+          onResetBlankProject={wrapCloseCallback(setOpen, onResetBlankProject)}
         />
       )}
-      <HiddenRestoreInputs
-        folderInputRef={folderInputRef}
-        zipInputRef={zipInputRef}
-        onRestoreFolder={restoreCtrl.restoreFromFolder}
-        onRestoreZip={restoreCtrl.restoreFromZip}
-      />
-      <PackageFeedbackToast
-        exportStatus={exportCtrl.status}
-        exportMessage={exportCtrl.message}
-        restoreStatus={restoreCtrl.status}
-        restoreMessage={restoreCtrl.message}
-      />
+      <HiddenRestoreInputs folderInputRef={folderInputRef} zipInputRef={zipInputRef} onRestoreFolder={restoreCtrl.restoreFromFolder} onRestoreZip={restoreCtrl.restoreFromZip} />
+      <PackageFeedbackToast exportStatus={exportCtrl.status} exportMessage={exportCtrl.message} restoreStatus={restoreCtrl.status} restoreMessage={restoreCtrl.message} onDismiss={dismissAllFeedback} />
     </div>
   )
 }

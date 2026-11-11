@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { createId } from '@/shared/lib/id'
 import type {
   CanvasId,
+  FileNodeContent,
   ImageNodeContent,
   ImageSlideItem,
   NodeContent,
@@ -17,12 +18,15 @@ import type {
 import type { AddImageNodeTarget } from '../data/document'
 import {
   addChildNode,
+  addFileNode,
   addImageNode,
   addImagePageToNode,
+  addRichTextNode,
   addSiblingNode,
   applyInCanvas,
   canDeleteNodeInCanvas,
   changeNodeKind,
+  moveActiveImagePageInNode,
   removeActiveImagePageFromNode,
   removeNode,
   removeParentNode,
@@ -50,6 +54,8 @@ export interface NodeMutations {
   readonly addChild: (parentId: NodeId) => void
   readonly addSibling: (nodeId: NodeId) => void
   readonly addImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
+  readonly addFile: (content: FileNodeContent, target?: AddImageNodeTarget) => void
+  readonly addRichText: (richText: string, target?: AddImageNodeTarget) => void
   readonly deleteNode: (nodeId: NodeId) => void
   readonly removeParent: (nodeId: NodeId, parentId: NodeId) => void
   readonly updateContent: (nodeId: NodeId, richText: string) => void
@@ -59,6 +65,7 @@ export interface NodeMutations {
   readonly replaceImagePage: (nodeId: NodeId, item: ImageSlideItem) => void
   readonly addImagePages: (nodeId: NodeId, items: readonly ImageSlideItem[]) => void
   readonly deleteImagePage: (nodeId: NodeId) => void
+  readonly moveImagePage: (nodeId: NodeId, direction: 'left' | 'right') => void
   readonly updateFile: (
     nodeId: NodeId,
     fileName: string,
@@ -113,7 +120,33 @@ function useNodeInsertActions({
     },
     [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId],
   )
-  return { addChild, addSibling, addImage }
+  const addFile = useCallback(
+    (content: FileNodeContent, target?: AddImageNodeTarget) => {
+      const newNodeId = createId()
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          addFileNode(slice, newNodeId, content, target),
+        ),
+      )
+      setSelectedNodeId(newNodeId)
+      setEditingNodeId(null)
+    },
+    [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId],
+  )
+  const addRichText = useCallback(
+    (richText: string, target?: AddImageNodeTarget) => {
+      const newNodeId = createId()
+      setDocument((curr) =>
+        applyInCanvas(curr, activeCanvasId, (slice) =>
+          addRichTextNode(slice, newNodeId, richText, target),
+        ),
+      )
+      setSelectedNodeId(newNodeId)
+      setEditingNodeId(null)
+    },
+    [activeCanvasId, setDocument, setSelectedNodeId, setEditingNodeId],
+  )
+  return { addChild, addSibling, addImage, addFile, addRichText }
 }
 
 function useNodeDeleteAction({
@@ -250,7 +283,15 @@ function useNodeAssetAndLayoutActions({
     },
     [activeCanvasId, setDocument],
   )
-  return { updateImage, updateFile, updateLayout, updateEvents, switchNodePage, bindEventTarget, setHidden }
+  return {
+    updateImage,
+    updateFile,
+    updateLayout,
+    updateEvents,
+    switchNodePage,
+    bindEventTarget,
+    setHidden,
+  }
 }
 
 function useNodeImagePageActions({
@@ -275,7 +316,13 @@ function useNodeImagePageActions({
     },
     [activeCanvasId, setDocument],
   )
-  return { replaceImagePage, addImagePages, deleteImagePage }
+  const moveImagePage = useCallback(
+    (nodeId: NodeId, direction: 'left' | 'right') => {
+      setDocument((curr) => moveActiveImagePageInNode(curr, nodeId, direction, activeCanvasId))
+    },
+    [activeCanvasId, setDocument],
+  )
+  return { replaceImagePage, addImagePages, deleteImagePage, moveImagePage }
 }
 
 /** 文档结构与字段编辑操作（自动作用于当前激活的主画布或支线画布，并同步同源节点） */
@@ -285,7 +332,9 @@ export function useNodeMutations(options: Readonly<NodeMutationsOptions>): NodeM
   const removeParent = useCallback(
     (nodeId: NodeId, parentId: NodeId) => {
       options.setDocument((curr) =>
-        applyInCanvas(curr, options.activeCanvasId, (slice) => removeParentNode(slice, nodeId, parentId)),
+        applyInCanvas(curr, options.activeCanvasId, (slice) =>
+          removeParentNode(slice, nodeId, parentId),
+        ),
       )
     },
     [options],
@@ -293,5 +342,12 @@ export function useNodeMutations(options: Readonly<NodeMutationsOptions>): NodeM
   const textAndKindActions = useNodeTextAndKindActions(options)
   const assetAndLayoutActions = useNodeAssetAndLayoutActions(options)
   const imagePageActions = useNodeImagePageActions(options)
-  return { ...insertActions, deleteNode, removeParent, ...textAndKindActions, ...assetAndLayoutActions, ...imagePageActions }
+  return {
+    ...insertActions,
+    deleteNode,
+    removeParent,
+    ...textAndKindActions,
+    ...assetAndLayoutActions,
+    ...imagePageActions,
+  }
 }

@@ -1,4 +1,11 @@
-import { Editor, EditorToolbar, useEditor, useProjectPersistence } from '@/features/editor'
+import {
+  Editor,
+  EditorToolbar,
+  FilePoolPanel,
+  SlideComposerModal,
+  useEditor,
+  useProjectPersistence,
+} from '@/features/editor'
 import { ProjectPackageControls } from '@/features/exporter'
 
 interface EditorSectionProps {
@@ -35,6 +42,14 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
           <ProjectPackageControls
             document={editor.document}
             onRestoreDocument={editor.replaceDocument}
+            filePoolOpen={editor.filePool.isOpen}
+            onToggleFilePool={() => {
+              editor.filePool.setIsOpen((prev) => !prev)
+            }}
+            onOpenNewSlideComposer={() => {
+              editor.openNewSlideComposer()
+            }}
+            onResetBlankProject={editor.resetBlankProject}
           />
         }
         selectedNode={editor.selectedNode}
@@ -52,6 +67,11 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
         onReplaceImagePage={editor.replaceImagePage}
         onAddImagePages={editor.addImagePages}
         onDeleteImagePage={editor.deleteImagePage}
+        onMoveImagePage={editor.moveImagePage}
+        onCreateSlideForNode={(nodeId) => {
+          editor.openNewSlideComposer(editor.filePool.currentFolder, nodeId)
+        }}
+        onEditSlidePath={editor.openEditSlideComposer}
         onUpdateNodeFile={editor.updateFile}
         onUpdateLayout={editor.updateLayout}
         onUpdateNodeEvents={editor.updateEvents}
@@ -80,6 +100,14 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
 function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
   return (
     <main className="relative min-h-0 flex-1">
+      <FilePoolPanel
+        pool={editor.filePool}
+        onCreateNewSlide={(folderPath) => {
+          editor.openNewSlideComposer(folderPath)
+        }}
+        onEditSlide={editor.openEditSlideComposer}
+        onQuickInsertEntry={editor.quickInsertInboxEntry}
+      />
       <Editor
         document={editor.activeDocument}
         activeCanvasId={editor.activeCanvasId}
@@ -90,6 +118,9 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         expandedMediaNodeId={editor.expandedMediaNodeId}
         detailMediaNodeId={editor.detailMediaNodeId}
         detailReference={editor.detailReference}
+        inboxEntries={editor.filePool.entries}
+        currentInboxFolder={editor.filePool.currentFolder}
+        onRefreshInbox={editor.filePool.refresh}
         onSelectNode={editor.selectNode}
         onStartEditing={editor.startEditing}
         onStopEditing={editor.stopEditing}
@@ -97,6 +128,11 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onFitNodeSize={editor.updateLayout}
         onSwitchNodePage={editor.switchNodePage}
         onAddImage={editor.addImage}
+        onAddImagePages={editor.addImagePages}
+        onReplaceImagePage={editor.replaceImagePage}
+        onAddFile={editor.addFile}
+        onUpdateFile={editor.updateFile}
+        onAddRichText={editor.addRichText}
         onTriggerEvent={editor.triggerNodeEvent}
         onNavigateCanvas={editor.navigateToCanvas}
         onPopSubCanvas={editor.popSubCanvas}
@@ -111,6 +147,12 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         onPendingNodeClick={editor.pendingNodeClick}
         onPendingBackground={editor.pendingBackground}
         onPendingCancel={editor.cancelPending}
+      />
+      <SlideComposerModal
+        target={editor.slideComposerTarget}
+        inboxEntries={editor.filePool.entries}
+        onClose={editor.closeSlideComposer}
+        onSavedSlide={editor.handleSavedSlide}
       />
     </main>
   )

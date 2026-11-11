@@ -1,15 +1,19 @@
 import { useRef } from 'react'
 
+import type { InboxEntry } from '@/shared/lib/inbox'
 import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import type {
   BreadcrumbItem,
   CanvasId,
+  FileNodeContent,
   ImageNodeContent,
+  ImageSlideItem,
   NodeEventAction,
   NodeId,
   PageSwitchMode,
   PaperDocument,
   PaperReference,
+  StaticFileFormat,
 } from '@/shared/types/paper'
 import type { AddImageNodeTarget } from '../data/document'
 import { canAddParent } from '../data/document'
@@ -31,6 +35,9 @@ interface EditorCanvasProps {
   readonly selectedNodeId: NodeId | null
   readonly editingNodeId: NodeId | null
   readonly expandedMediaNodeId: NodeId | null
+  readonly inboxEntries?: readonly InboxEntry[] | undefined
+  readonly currentInboxFolder?: string | undefined
+  readonly onRefreshInbox?: (() => Promise<void>) | undefined
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onStopEditing: () => void
@@ -38,6 +45,13 @@ interface EditorCanvasProps {
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
+  readonly onAddImagePages?: ((nodeId: NodeId, items: readonly ImageSlideItem[]) => void) | undefined
+  readonly onReplaceImagePage?: ((nodeId: NodeId, item: ImageSlideItem) => void) | undefined
+  readonly onAddFile?: ((content: FileNodeContent, target?: AddImageNodeTarget) => void) | undefined
+  readonly onUpdateFile?:
+    | ((nodeId: NodeId, fileName: string, format: StaticFileFormat, text: string) => void)
+    | undefined
+  readonly onAddRichText?: ((richText: string, target?: AddImageNodeTarget) => void) | undefined
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined
   readonly onPopSubCanvas?: (() => void) | undefined
@@ -85,7 +99,7 @@ function DropHintBanner() {
       className="pointer-events-none absolute inset-3 z-40 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/60 bg-primary/5 backdrop-blur-[1px]"
     >
       <span className="rounded-lg border border-primary/20 bg-white/95 px-4 py-2 text-xs font-medium text-primary shadow-md">
-        释放图片以创建多媒体节点（存入 res/inbox/）
+        释放文件或文件夹以添加到画布或目标节点（存入 res/inbox/）
       </span>
     </div>
   )

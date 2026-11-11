@@ -100,6 +100,37 @@ export function removeActiveImagePageFromNode(
   )
 }
 
+function moveActiveImagePageInSlice(
+  slice: PaperDocument,
+  nodeId: NodeId,
+  direction: 'left' | 'right',
+): PaperDocument {
+  const node = slice.nodes.find((entry) => entry.id === nodeId)
+  if (node === undefined || node.content.kind !== 'image') return slice
+  const items = [...resolveImageItems(node.content)]
+  if (items.length <= 1) return slice
+  const activeIndex = resolveActiveImageIndex(node.content)
+  const targetIndex = direction === 'left' ? activeIndex - 1 : activeIndex + 1
+  if (targetIndex < 0 || targetIndex >= items.length) return slice
+  const activeItem = items[activeIndex]
+  const swapItem = items[targetIndex]
+  if (activeItem === undefined || swapItem === undefined) return slice
+  items[activeIndex] = swapItem
+  items[targetIndex] = activeItem
+  return replaceNodeContent(slice, nodeId, buildImageContentWithItems(items, targetIndex))
+}
+
+export function moveActiveImagePageInNode(
+  document: PaperDocument,
+  nodeId: NodeId,
+  direction: 'left' | 'right',
+  canvasId: CanvasId | null = null,
+): PaperDocument {
+  return applyInCanvas(document, canvasId, (slice) =>
+    moveActiveImagePageInSlice(slice, nodeId, direction),
+  )
+}
+
 function switchImagePage(
   slice: PaperDocument,
   nodeId: NodeId,

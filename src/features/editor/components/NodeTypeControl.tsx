@@ -15,8 +15,11 @@ interface NodeTypeControlProps {
   readonly onReplaceImagePage: (item: ImageSlideItem) => void
   readonly onAddImagePages: (items: readonly ImageSlideItem[]) => void
   readonly onDeleteImagePage: () => void
+  readonly onMoveImagePage?: ((direction: 'left' | 'right') => void) | undefined
+  readonly onCreateSlideForNode?: (() => void) | undefined
+  readonly onEditSlidePath?: ((relPath: string) => void) | undefined
   readonly onPickFile: (fileName: string, format: StaticFileFormat, text: string) => void
-  readonly onEditText?: () => void
+  readonly onEditText?: (() => void) | undefined
 }
 
 interface NodeKindButtonsProps {
@@ -190,6 +193,9 @@ export function NodeTypeControl({
   onReplaceImagePage,
   onAddImagePages,
   onDeleteImagePage,
+  onMoveImagePage,
+  onCreateSlideForNode,
+  onEditSlidePath,
   onPickFile,
   onEditText,
 }: Readonly<NodeTypeControlProps>) {
@@ -238,6 +244,9 @@ export function NodeTypeControl({
           onReplaceImagePage={onReplaceImagePage}
           onAddImagePages={onAddImagePages}
           onDeleteImagePage={onDeleteImagePage}
+          onMoveImagePage={onMoveImagePage}
+          onCreateSlideForNode={onCreateSlideForNode}
+          onEditSlidePath={onEditSlidePath}
         />
       )}
       {content?.kind === 'file' && (

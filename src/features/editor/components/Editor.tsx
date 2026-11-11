@@ -1,14 +1,18 @@
+import type { InboxEntry } from '@/shared/lib/inbox'
 import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import { findTriggeredEvent } from '@/shared/lib/nodeEvents'
 import type {
   BreadcrumbItem,
   CanvasId,
+  FileNodeContent,
   ImageNodeContent,
+  ImageSlideItem,
   NodeEventAction,
   NodeId,
   PageSwitchMode,
   PaperDocument,
   PaperReference,
+  StaticFileFormat,
 } from '@/shared/types/paper'
 import type { AddImageNodeTarget } from '../data/document'
 import type { Point } from '../data/layout'
@@ -29,6 +33,9 @@ interface EditorProps {
   readonly expandedMediaNodeId: NodeId | null
   readonly detailMediaNodeId: NodeId | null
   readonly detailReference: PaperReference | null
+  readonly inboxEntries?: readonly InboxEntry[] | undefined
+  readonly currentInboxFolder?: string | undefined
+  readonly onRefreshInbox?: (() => Promise<void>) | undefined
   readonly onSelectNode: (nodeId: NodeId | null) => void
   readonly onStartEditing: (nodeId: NodeId) => void
   readonly onStopEditing: () => void
@@ -36,6 +43,13 @@ interface EditorProps {
   readonly onFitNodeSize: (nodeId: NodeId, size: NodeSize) => void
   readonly onSwitchNodePage: (nodeId: NodeId, mode: PageSwitchMode, pageIndex?: number) => void
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
+  readonly onAddImagePages?: ((nodeId: NodeId, items: readonly ImageSlideItem[]) => void) | undefined
+  readonly onReplaceImagePage?: ((nodeId: NodeId, item: ImageSlideItem) => void) | undefined
+  readonly onAddFile?: ((content: FileNodeContent, target?: AddImageNodeTarget) => void) | undefined
+  readonly onUpdateFile?:
+    | ((nodeId: NodeId, fileName: string, format: StaticFileFormat, text: string) => void)
+    | undefined
+  readonly onAddRichText?: ((richText: string, target?: AddImageNodeTarget) => void) | undefined
   readonly onTriggerEvent: (nodeId: NodeId, action: NodeEventAction) => void
   readonly onNavigateCanvas?: ((canvasId: CanvasId | null) => void) | undefined
   readonly onPopSubCanvas?: (() => void) | undefined

@@ -12,16 +12,14 @@ import { useEditorSelection } from './useEditorSelection'
 import { useNodeClipboard } from './useNodeClipboard'
 import { useNodeMutations } from './useNodeMutations'
 import { usePendingNodeAction } from './usePendingNodeAction'
+import { useSlideAndFilePoolActions } from './useSlideAndFilePoolActions'
 import { useStructureMutations } from './useStructureMutations'
 
-/** 编辑器状态：持有主文档与支线画布导航栈，暴露单节点编辑、事件绑定、结构拖动与文档级操作 */
+/** 编辑器状态：持有主文档与支线画布导航栈，暴露单节点编辑、事件绑定、文件池与幻灯片画板操作 */
 export function useEditor() {
   const [document, setDocument] = useState<PaperDocument>(createInitialDocument)
   const [activeCanvasHint, setActiveCanvasHint] = useState<CanvasId | null>(null)
-  const currentSlice = useMemo(
-    () => activeCanvasDocument(document, activeCanvasHint),
-    [document, activeCanvasHint],
-  )
+  const currentSlice = useMemo(() => activeCanvasDocument(document, activeCanvasHint), [document, activeCanvasHint])
   const selection = useEditorSelection(currentSlice.nodes)
   const resetCanvasSelection = useCallback(() => {
     selection.setSelectedNodeId(null)
@@ -36,9 +34,7 @@ export function useEditor() {
     openMediaDetail: selection.openMediaDetail,
     startEditing: selection.startEditing,
   })
-  if (navigation.activeCanvasId !== activeCanvasHint) {
-    setActiveCanvasHint(navigation.activeCanvasId)
-  }
+  if (navigation.activeCanvasId !== activeCanvasHint) setActiveCanvasHint(navigation.activeCanvasId)
 
   const mutationContext = useMemo(
     () => ({
@@ -75,6 +71,13 @@ export function useEditor() {
     selectNode: selection.setSelectedNodeId,
     bindEventTarget: nodeMutations.bindEventTarget,
   })
+  const slideAndPool = useSlideAndFilePoolActions({
+    document,
+    activeNodes: currentSlice.nodes,
+    selectedNode: selection.selectedNode,
+    nodeMutations,
+    replaceDocument: documentMutations.replaceDocument,
+  })
 
   const triggerNodeEvent = useCallback(
     (nodeId: NodeId, action: NodeEventAction) => {
@@ -95,6 +98,7 @@ export function useEditor() {
     ...documentMutations,
     ...structure,
     ...clipboard,
+    ...slideAndPool,
     pending: pendingActions.pending,
     armStructure: pendingActions.armStructure,
     armFit: pendingActions.armFit,

@@ -2,8 +2,7 @@
  * 导出包解析与复原流水线
  *
  * 把离线演示包（data.js + res/inbox/ + assets/）还原为可再次编辑的工程：
- * 资源字节重新落盘到 res/inbox/，文档内的路径改写为新的持久化地址。
- * 输入是抽象的「相对路径 -> 字节」映射，来源（文件夹 / .zip）由 readPackageFiles 负责。
+ * 资源字节重新落盘到 res/inbox/（保留子文件夹结构与可读文件名），文档内的路径改写为新的持久化地址。
  */
 
 import { uploadBlobToInbox } from '@/shared/lib/inbox'
@@ -65,7 +64,6 @@ export function parseDataJsDocument(script: string): PaperDocument {
   if (!isRecord(raw) || raw.document === undefined) {
     throw new Error('data.js 缺少 document 字段')
   }
-  // parseProjectFile 校验的是工程文件信封；data.js 只带 document，补上格式版本后复用同一套校验
   const result = parseProjectFile(
     JSON.stringify({ formatVersion: PROJECT_FORMAT_VERSION, document: raw.document }),
   )
@@ -108,15 +106,38 @@ function isPlainAssetPath(path: string): boolean {
   return ASSET_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
 }
 
-/** 普通文件资源（图片 / HTML / 直存的 PDF）全部重新落盘到 res/inbox/ */
+function splitInboxFolderAndName(path: string): {
+  readonly folder: string
+  readonly fileName: string
+  readonly preserve: boolean
+} {
+  if (path.startsWith('res/inbox/')) {
+    const rel = path.slice('res/inbox/'.length)
+    const slashIdx = rel.lastIndexOf('/')
+    return slashIdx === -1
+      ? { folder: '', fileName: rel, preserve: true }
+      : { folder: rel.slice(0, slashIdx), fileName: rel.slice(slashIdx + 1), preserve: true }
+  }
+  const fileName = path.slice(path.lastIndexOf('/') + 1)
+  return { folder: '', fileName, preserve: false }
+}
+
+/** 普通文件资源（图片 / .slide.svg / HTML / 直存的 PDF）全部重新落盘到 res/inbox/ */
 async function restorePlainAssets(
   files: ReadonlyMap<string, Blob | string>,
   pathBySource: Map<string, string>,
 ): Promise<void> {
   for (const [path, value] of files) {
     if (!isPlainAssetPath(path)) continue
-    const fileName = path.slice(path.lastIndexOf('/') + 1)
-    const newSrc = await uploadBlobToInbox(await toTypedBlob(value, path), fileName)
+    const { folder, fileName, preserve } = splitInboxFolderAndName(path)
+    const newSrc = await uploadBlobToInbox(
+      await toTypedBlob(value, path),
+      fileName,
+      Date.now(),
+      folder,
+      preserve,
+      preserve,
+    )
     pathBySource.set(path, newSrc)
     pathBySource.set(`./${path}`, newSrc)
   }

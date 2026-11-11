@@ -1,4 +1,6 @@
 export { Editor } from './components/Editor'
 export { EditorToolbar } from './components/EditorToolbar'
+export { FilePoolPanel } from './components/FilePoolPanel'
+export { SlideComposerModal } from './components/SlideComposerModal'
 export { useEditor } from './hooks/useEditor'
 export { useProjectPersistence } from './hooks/useProjectPersistence'

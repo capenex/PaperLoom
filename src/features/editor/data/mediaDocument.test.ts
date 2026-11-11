@@ -10,6 +10,7 @@ import type {
 import { createInitialDocument, ensureSubCanvasForNode, updateTextNodeContent } from './document'
 import {
   addImagePageToNode,
+  moveActiveImagePageInNode,
   removeActiveImagePageFromNode,
   replaceActiveImagePageInNode,
   switchNodePageInDocument,
@@ -234,4 +235,22 @@ void test('sub-canvas-only nodes are editable and found by cross-canvas page swi
   assert.ok(finalContent !== undefined && finalContent.kind === 'image')
   assert.equal(finalContent.activeIndex, 0)
   assert.equal(finalContent.src, '/s.png')
+})
+
+void test('moveActiveImagePageInNode reorders active image page left and right', () => {
+  const { doc, imageId } = initialPair()
+  let next = addImagePageToNode(doc, imageId, [
+    { src: '/b.png', alt: 'B' },
+    { src: '/c.png', alt: 'C' },
+  ])
+  next = moveActiveImagePageInNode(next, imageId, 'left')
+  let content = imageContentOf(next, imageId)
+  assert.equal(content.activeIndex, 1)
+  assert.equal(content.src, '/c.png')
+  assert.deepEqual(content.items?.map((item) => item.alt), ['示例图片', 'C', 'B'])
+
+  next = moveActiveImagePageInNode(next, imageId, 'right')
+  content = imageContentOf(next, imageId)
+  assert.equal(content.activeIndex, 2)
+  assert.deepEqual(content.items?.map((item) => item.alt), ['示例图片', 'B', 'C'])
 })

@@ -2,27 +2,63 @@ import { createId } from '@/shared/lib/id'
 import { FALLBACK_DOCUMENT_DEFAULTS } from '@/shared/lib/nodeDefaults'
 import { defaultEventsForKind } from '@/shared/lib/nodeEvents'
 import { collectDescendantIds, collectRemovalIds, describeLevelProblem } from '@/shared/lib/nodeTree'
-import type { DocumentDefaults, ImageNodeContent, NodeId, NodeLayout, PaperDocument, PaperNode } from '@/shared/types/paper'
+import type {
+  DocumentDefaults,
+  FileNodeContent,
+  ImageNodeContent,
+  NodeId,
+  NodeLayout,
+  PaperDocument,
+  PaperNode,
+} from '@/shared/types/paper'
 import type { Point } from './layout'
 import { nextRootAnchor, stageBoundsShift } from './layout'
 import { SAMPLE_IMAGE } from './nodeContent'
 
-export { changeNodeKind, updateFileNodeContent, updateImageNodeContent, updateTextNodeContent, updateTitleNodeContent } from './nodeContent'
-export { addImagePageToNode, removeActiveImagePageFromNode, replaceActiveImagePageInNode, resolveWatchlistNodes, switchNodePageInDocument, toggleNodeInWatchlist } from './mediaDocument'
-export { activeCanvasDocument, applyInCanvas, canDeleteNodeInCanvas, ensureSubCanvasForNode, propagateSharedNodeState, updateEventActionTarget, updateNodeEventsInDocument } from './subCanvas'
+export {
+  changeNodeKind,
+  updateFileNodeContent,
+  updateImageNodeContent,
+  updateTextNodeContent,
+  updateTitleNodeContent,
+} from './nodeContent'
+export {
+  addImagePageToNode,
+  moveActiveImagePageInNode,
+  removeActiveImagePageFromNode,
+  replaceActiveImagePageInNode,
+  resolveWatchlistNodes,
+  switchNodePageInDocument,
+  toggleNodeInWatchlist,
+} from './mediaDocument'
+export {
+  activeCanvasDocument,
+  applyInCanvas,
+  canDeleteNodeInCanvas,
+  ensureSubCanvasForNode,
+  propagateSharedNodeState,
+  updateEventActionTarget,
+  updateNodeEventsInDocument,
+} from './subCanvas'
 
 export interface AddImageNodeTarget {
   readonly parentId?: NodeId | null
   readonly anchor?: Point
+  readonly size?: { readonly width: number; readonly height: number }
 }
 
 /** 生成空白文字节点；尺寸留空，渲染时使用共享默认值 */
-function createTextNode(id: NodeId, parentId: NodeId | null): PaperNode {
+function createTextNode(
+  id: NodeId,
+  parentId: NodeId | null,
+  richText = '',
+  anchor: Point = { x: 0, y: 0 },
+): PaperNode {
   return {
     id,
     parentIds: parentId === null ? [] : [parentId],
-    content: { kind: 'text', richText: '' },
-    layout: { x: 0, y: 0, collapsed: false },
+    content: { kind: 'text', richText },
+    layout: { x: anchor.x, y: anchor.y, collapsed: false },
   }
 }
 
@@ -32,12 +68,33 @@ function createImageNode(
   parentId: NodeId | null,
   content: ImageNodeContent = SAMPLE_IMAGE,
   anchor: Point = { x: 0, y: 0 },
+  size?: { readonly width: number; readonly height: number },
 ): PaperNode {
   return {
     id,
     parentIds: parentId === null ? [] : [parentId],
     content,
     events: defaultEventsForKind('image'),
+    layout: {
+      x: anchor.x,
+      y: anchor.y,
+      collapsed: false,
+      ...(size === undefined ? {} : { width: size.width, height: size.height }),
+    },
+  }
+}
+
+function createFileNode(
+  id: NodeId,
+  parentId: NodeId | null,
+  content: FileNodeContent,
+  anchor: Point = { x: 0, y: 0 },
+): PaperNode {
+  return {
+    id,
+    parentIds: parentId === null ? [] : [parentId],
+    content,
+    events: defaultEventsForKind('file'),
     layout: { x: anchor.x, y: anchor.y, collapsed: false },
   }
 }
@@ -56,7 +113,7 @@ function ensureStageBounds(document: PaperDocument): PaperDocument {
   const shift = stageBoundsShift(document.nodes, document.rootIds, document.defaults)
   if (shift.x === 0 && shift.y === 0) return document
 
-  const nodes = document.nodes.map(node =>
+  const nodes = document.nodes.map((node) =>
     node.parentIds.length === 0
       ? {
           ...node,
@@ -106,11 +163,7 @@ export function addRootNode(document: PaperDocument, newNodeId: NodeId): PaperDo
     layout: { x: anchor.x, y: anchor.y, collapsed: false },
   }
 
-  return withStructure(
-    document,
-    [...document.nodes, newRoot],
-    [...document.rootIds, newNodeId],
-  )
+  return withStructure(document, [...document.nodes, newRoot], [...document.rootIds, newNodeId])
 }
 
 /** 在指定节点下添加一个空白子节点，返回新文档（不可变更新） */
@@ -119,7 +172,7 @@ export function addChildNode(
   parentId: NodeId,
   newNodeId: NodeId,
 ): PaperDocument {
-  const exists = document.nodes.some(node => node.id === parentId)
+  const exists = document.nodes.some((node) => node.id === parentId)
   if (!exists) return document
 
   const nodes = [...document.nodes, createTextNode(newNodeId, parentId)]
@@ -134,14 +187,50 @@ export function addImageNode(
   target?: AddImageNodeTarget,
 ): PaperDocument {
   const parentId = target?.parentId ?? null
-  if (parentId !== null && document.nodes.some(node => node.id === parentId)) {
-    const child = createImageNode(newNodeId, parentId, content)
+  if (parentId !== null && document.nodes.some((node) => node.id === parentId)) {
+    const child = createImageNode(newNodeId, parentId, content, { x: 0, y: 0 }, target?.size)
     return withStructure(document, [...document.nodes, child], document.rootIds)
   }
 
   const anchor =
     target?.anchor ?? nextRootAnchor(document.nodes, document.rootIds, document.defaults)
-  const root = createImageNode(newNodeId, null, content, anchor)
+  const root = createImageNode(newNodeId, null, content, anchor, target?.size)
+  return withStructure(document, [...document.nodes, root], [...document.rootIds, newNodeId])
+}
+
+/** 新增一个静态文件节点（支持直接从文件池或外部拖入 .md / 代码文件创建） */
+export function addFileNode(
+  document: PaperDocument,
+  newNodeId: NodeId,
+  content: FileNodeContent,
+  target?: AddImageNodeTarget,
+): PaperDocument {
+  const parentId = target?.parentId ?? null
+  if (parentId !== null && document.nodes.some((node) => node.id === parentId)) {
+    const child = createFileNode(newNodeId, parentId, content)
+    return withStructure(document, [...document.nodes, child], document.rootIds)
+  }
+  const anchor =
+    target?.anchor ?? nextRootAnchor(document.nodes, document.rootIds, document.defaults)
+  const root = createFileNode(newNodeId, null, content, anchor)
+  return withStructure(document, [...document.nodes, root], [...document.rootIds, newNodeId])
+}
+
+/** 新增一个带初始富文本（如拖入 PDF/HTML 自动生成的引用锚点）的文本节点 */
+export function addRichTextNode(
+  document: PaperDocument,
+  newNodeId: NodeId,
+  richText: string,
+  target?: AddImageNodeTarget,
+): PaperDocument {
+  const parentId = target?.parentId ?? null
+  if (parentId !== null && document.nodes.some((node) => node.id === parentId)) {
+    const child = createTextNode(newNodeId, parentId, richText)
+    return withStructure(document, [...document.nodes, child], document.rootIds)
+  }
+  const anchor =
+    target?.anchor ?? nextRootAnchor(document.nodes, document.rootIds, document.defaults)
+  const root = createTextNode(newNodeId, null, richText, anchor)
   return withStructure(document, [...document.nodes, root], [...document.rootIds, newNodeId])
 }
 

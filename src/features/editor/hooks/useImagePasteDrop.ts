@@ -1,25 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent as ReactDragEvent, RefObject } from 'react'
 
-import type { ImageNodeContent, NodeId } from '@/shared/types/paper'
+import type {
+  FileNodeContent,
+  ImageNodeContent,
+  ImageSlideItem,
+  NodeId,
+  PaperDocument,
+  StaticFileFormat,
+} from '@/shared/types/paper'
+import type { InboxEntry } from '@/shared/lib/inbox'
 import type { AddImageNodeTarget } from '../data/document'
 import type { DocumentLayout, Point } from '../data/layout'
 import { cardIdAtPoint, measureWorldZoom } from '../lib/dragHitTest'
+import { readDraggedInboxPayload } from '../lib/inboxClient'
 import {
   INBOX_SAVE_FAILED,
-  extractImageFiles,
+  applyImageItemsToCanvas,
+  dispatchInboxEntryToCanvas,
+  extractAllDroppedFiles,
   extractPastedImageFile,
   hasFilesInDataTransfer,
-  saveImageFileToInbox,
+  ingestExternalFileToCanvas,
+  saveImageSlideToInbox,
 } from '../lib/inboxUpload'
+import type { CanvasFileDropCallbacks } from '../lib/inboxUpload'
 
 const MULTI_DROP_OFFSET_Y = 160
 
 interface ImagePasteDropOptions {
+  readonly document: PaperDocument
   readonly selectedNodeId: NodeId | null
   readonly layout: DocumentLayout
   readonly stageRef: RefObject<HTMLDivElement | null>
+  readonly inboxEntries?: readonly InboxEntry[] | undefined
+  readonly currentInboxFolder?: string | undefined
+  readonly onRefreshInbox?: (() => Promise<void>) | undefined
   readonly onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void
+  readonly onAddImagePages?: ((nodeId: NodeId, items: readonly ImageSlideItem[]) => void) | undefined
+  readonly onReplaceImagePage?: ((nodeId: NodeId, item: ImageSlideItem) => void) | undefined
+  readonly onAddFile?: ((content: FileNodeContent, target?: AddImageNodeTarget) => void) | undefined
+  readonly onUpdateFile?:
+    | ((nodeId: NodeId, fileName: string, format: StaticFileFormat, text: string) => void)
+    | undefined
+  readonly onAddRichText?: ((richText: string, target?: AddImageNodeTarget) => void) | undefined
+  readonly onUpdateContent?: ((nodeId: NodeId, richText: string) => void) | undefined
 }
 
 export interface ImagePasteDropControls {
@@ -46,52 +71,74 @@ function resolveDropAnchor(
   }
 }
 
-async function ingestImageFiles(
-  files: readonly File[],
-  resolveTarget: (index: number) => AddImageNodeTarget | undefined,
-  onAddImage: (content: ImageNodeContent, target?: AddImageNodeTarget) => void,
-): Promise<void> {
-  let failed = false
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index]
-    if (file === undefined) continue
-    try {
-      const content = await saveImageFileToInbox(file)
-      onAddImage(content, resolveTarget(index))
-    } catch {
-      failed = true
-    }
+function toDropCallbacks(options: Readonly<ImagePasteDropOptions>): CanvasFileDropCallbacks {
+  return {
+    nodes: options.document.nodes,
+    inboxEntries: options.inboxEntries,
+    currentInboxFolder: options.currentInboxFolder,
+    onRefreshInbox: options.onRefreshInbox,
+    onAddImage: options.onAddImage,
+    onAddImagePages: options.onAddImagePages,
+    onReplaceImagePage: options.onReplaceImagePage,
+    onAddFile: options.onAddFile,
+    onUpdateFile: options.onUpdateFile,
+    onAddRichText: options.onAddRichText,
+    onUpdateContent: options.onUpdateContent,
   }
-  // 一次拖入多张时失败也只提示一次
-  if (failed) window.alert(INBOX_SAVE_FAILED)
 }
 
-function handleCanvasImageDrop(
+function handleCanvasDrop(
   event: ReactDragEvent<HTMLDivElement>,
   options: Readonly<ImagePasteDropOptions>,
 ): void {
-  const files = extractImageFiles(event.dataTransfer)
-  if (files.length === 0) return
-  event.preventDefault()
-
-  const { layout, stageRef, onAddImage } = options
+  const { document: doc, layout, stageRef } = options
   const hitNodeId = cardIdAtPoint(event.clientX, event.clientY, new Set())
+  const hitNode = hitNodeId === null ? undefined : doc.nodes.find((n) => n.id === hitNodeId)
   const baseAnchor =
     hitNodeId === null
       ? resolveDropAnchor(event.clientX, event.clientY, stageRef.current, layout.origin)
       : undefined
+  const callbacks = toDropCallbacks(options)
 
-  void ingestImageFiles(
-    files,
-    (index) => {
-      if (hitNodeId !== null) return { parentId: hitNodeId }
-      if (baseAnchor === undefined) return undefined
-      return {
-        anchor: { x: baseAnchor.x, y: baseAnchor.y + index * MULTI_DROP_OFFSET_Y },
+  const inboxPayload = readDraggedInboxPayload(event.dataTransfer)
+  if (inboxPayload !== null) {
+    event.preventDefault()
+    const target: AddImageNodeTarget | undefined =
+      hitNodeId === null
+        ? baseAnchor === undefined
+          ? undefined
+          : { anchor: baseAnchor }
+        : { parentId: hitNodeId }
+    void dispatchInboxEntryToCanvas(inboxPayload, hitNode, event.altKey, target, callbacks)
+    return
+  }
+
+  const files = extractAllDroppedFiles(event.dataTransfer)
+  if (files.length === 0) return
+  event.preventDefault()
+
+  void (async () => {
+    let failed = false
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index]
+      if (file === undefined) continue
+      const target: AddImageNodeTarget | undefined =
+        hitNodeId === null
+          ? baseAnchor === undefined
+            ? undefined
+            : { anchor: { x: baseAnchor.x, y: baseAnchor.y + index * MULTI_DROP_OFFSET_Y } }
+          : { parentId: hitNodeId }
+      try {
+        await ingestExternalFileToCanvas(file, hitNode, event.altKey, target, callbacks)
+      } catch {
+        failed = true
       }
-    },
-    onAddImage,
-  )
+    }
+    if (options.onRefreshInbox !== undefined) {
+      await options.onRefreshInbox()
+    }
+    if (failed) window.alert(INBOX_SAVE_FAILED)
+  })()
 }
 
 function useWindowImagePaste(latestRef: RefObject<Readonly<ImagePasteDropOptions>>): void {
@@ -100,20 +147,32 @@ function useWindowImagePaste(latestRef: RefObject<Readonly<ImagePasteDropOptions
       if (event.defaultPrevented) return
       const isEditingText =
         event.target instanceof Element &&
-        event.target.closest('input, textarea, [contenteditable="true"]') !== null
-      if (isEditingText && (event.clipboardData?.getData('text/plain') ?? '') !== '') {
-        return
-      }
-      // 粘贴只认一张图：截图与多格式剪贴板会把同一张图拆成多个文件项
+        event.target.closest('input, textarea, [contenteditable="true"], dialog, [role="dialog"]') !==
+          null
+      if (isEditingText) return
       const file = extractPastedImageFile(event.clipboardData)
       if (file === null) return
       event.preventDefault()
-      const { selectedNodeId, onAddImage } = latestRef.current
-      void ingestImageFiles(
-        [file],
-        () => (selectedNodeId === null ? undefined : { parentId: selectedNodeId }),
-        onAddImage,
-      )
+      const current = latestRef.current
+      const { document: doc, selectedNodeId } = current
+      const selectedNode =
+        selectedNodeId === null ? undefined : doc.nodes.find((n) => n.id === selectedNodeId)
+      const callbacks = toDropCallbacks(current)
+
+      void saveImageSlideToInbox(file, Date.now(), current.currentInboxFolder ?? '')
+        .then(async (slideItem) => {
+          applyImageItemsToCanvas(
+            [slideItem],
+            selectedNode,
+            false,
+            selectedNodeId === null ? undefined : { parentId: selectedNodeId },
+            callbacks,
+          )
+          await current.onRefreshInbox?.()
+        })
+        .catch(() => {
+          window.alert(INBOX_SAVE_FAILED)
+        })
     }
 
     window.addEventListener('paste', handlePaste)
@@ -124,8 +183,9 @@ function useWindowImagePaste(latestRef: RefObject<Readonly<ImagePasteDropOptions
 }
 
 /**
- * 编辑器图片粘贴与拖拽入库：
- * 粘贴或拖入画布的图片自动存入 res/inbox/<timestamp>.<ext> 并创建多媒体节点。
+ * 编辑器文件粘贴与拖拽入库（支持外部文件拖入及文件池条目/文件夹拖出）：
+ * - 拖到空白处：创建自适应图片节点 / 多页图片节点 / 静态文件节点 / 引用文本节点
+ * - 拖到已有节点：向图片节点追加新页（Alt 替换当前页）、替换文件节点内容或挂载引用
  */
 export function useImagePasteDrop(
   options: Readonly<ImagePasteDropOptions>,
@@ -153,7 +213,7 @@ export function useImagePasteDrop(
 
   const onDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
     setFileDropping(false)
-    handleCanvasImageDrop(event, latestRef.current)
+    handleCanvasDrop(event, latestRef.current)
   }, [])
 
   return { fileDropping, onDragOver, onDragLeave, onDrop }

@@ -37,6 +37,9 @@ export interface RibbonPanelSharedProps {
   readonly onReplaceImagePage: (nodeId: NodeId, item: ImageSlideItem) => void
   readonly onAddImagePages: (nodeId: NodeId, items: readonly ImageSlideItem[]) => void
   readonly onDeleteImagePage: (nodeId: NodeId) => void
+  readonly onMoveImagePage?: ((nodeId: NodeId, direction: 'left' | 'right') => void) | undefined
+  readonly onCreateSlideForNode?: ((nodeId: NodeId) => void) | undefined
+  readonly onEditSlidePath?: ((relPath: string) => void) | undefined
   readonly onUpdateNodeFile: (
     nodeId: NodeId,
     fileName: string,
@@ -150,6 +153,21 @@ function SharedNodeTypeControl({ props }: Readonly<{ props: RibbonPanelSharedPro
       onDeleteImagePage={() => {
         if (selectedNode !== undefined) props.onDeleteImagePage(selectedNode.id)
       }}
+      onMoveImagePage={
+        props.onMoveImagePage === undefined
+          ? undefined
+          : (direction) => {
+              if (selectedNode !== undefined) props.onMoveImagePage?.(selectedNode.id, direction)
+            }
+      }
+      onCreateSlideForNode={
+        props.onCreateSlideForNode === undefined
+          ? undefined
+          : () => {
+              if (selectedNode !== undefined) props.onCreateSlideForNode?.(selectedNode.id)
+            }
+      }
+      onEditSlidePath={props.onEditSlidePath}
       onPickFile={(name, format, text) => {
         if (selectedNode !== undefined) {
           props.onUpdateNodeFile(selectedNode.id, name, format, text)
