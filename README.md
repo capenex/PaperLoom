@@ -1,32 +1,65 @@
-# React + TypeScript + Vite
+# PaperLoom
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+PaperLoom 是一个基于浏览器的**通用结构化内容展示与离线演示工具**。
 
-Currently, two official plugins are available:
+作者在本地画布中编排思维导图式的多维演示结构、富文本、多媒体图集、PPT 式画板幻灯片（`.slide.svg`）与参考资料（PDF / 网页 / 静态代码文档），定稿后一键导出为零依赖静态文件包（`index.html` + `assets/` + `data.js`），拷贝到任意电脑双击 `index.html` 即可在 `file://` 协议下全功能离线演示，无需服务器或运行环境。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 核心特性
 
-## React Compiler
+- **四类节点与多父图结构**：支持富文本、纯标题、多媒体（图片 / 多页图集 / `.slide.svg` 幻灯片）、静态文件四类节点；支持同树跨分支多父节点连线与隐藏中继节点。
+- **混合 Markdown 富文本与分页**：支持字面 Markdown 块级语法、行内富格式、LaTeX 数学公式（`$...$` / `$$...$$`）与 `---` 多页分页。
+- **多媒体多页翻页与跨节点联动**：图片节点支持多图列表翻页、黄金视觉框自适应尺寸；支持文档级关注列表（Watchlist）与点击事件驱动跨节点联动翻页（`switch-node-page`）。
+- **PPT 式单页画板编辑器（`.slide.svg`）**：内置 16:9 / 4:3 / 1:1 矢量画板合成器，支持自由文本框、内嵌图片、高亮形状框与指示箭头，保存为标准 `.slide.svg` 进入文件池并直接复用图片节点展示与离线导出。
+- **常驻文件池资源管理器**：映射本地 `./res/inbox/`，支持多级文件夹、面包屑导航、引用计数统计、重命名/移动自动重写全工程引用、一键清理未使用资源，以及直接拖拽文件/文件夹上画布建节点。
+- **子画布与资料引用体系**：支持任意节点开辟独立支线子画布（同源内容投射、独立布局与独立相机）；支持网页、图片、PDF 资料引用、内置离线 PDF 阅读器及 PDF 框选截图自动归档。
+- **自动持久化与双向导出闭环**：编辑过程自动原子写入 `project.json`（含 `.bak` 自动备份恢复）；支持文件夹导出、快速增量同步导出、`.zip` 打包下载，以及从已导出的静态包完整复原回可编辑工程。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 快速开始
 
-## Expanding the Oxlint configuration
+```bash
+# 安装依赖
+npm install
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+# 启动本地开发与编辑服务
+npm run dev
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# 运行代码规范、模块依赖边界与构建检查
+npm run check
+
+# 运行单元测试
+npm test
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## 架构与模块划分
+
+项目严格遵循 `app → features → shared` 单向三层架构（由 `dependency-cruiser` 与 `oxlint` 强制校验）：
+
+```text
+src/
+├── app/                  # 应用组装层（根组件与全局布局）
+├── features/
+│   ├── editor/           # 画布编辑器、Ribbon 工具栏、文件池、.slide.svg 画板、PDF 阅读器
+│   └── exporter/         # 静态包生成器、离线演示运行时脚本、文件夹/.zip 导出与复原
+└── shared/               # 跨端共享数据契约（PaperDocument 等）、纯工具函数与基础 UI 组件
+```
+
+## 代码规模统计
+
+| 模块 / 分类 | 文件数 | 代码行数 | 说明 |
+|---|---:|---:|---|
+| `src/features/editor` | 110 | 18,055 | 画布编辑、富文本编译、文件池、幻灯片画板、子画布与联动 |
+| `src/features/exporter` | 21 | 4,407 | 离线包生成、内联演示器脚本、文件夹/.zip 导出与工程复原 |
+| `src/shared` | 21 | 2,934 | 共享类型契约、树与媒体页工具、引用重写、`.slide.svg` 序列化 |
+| `src/app` + 入口 (`main.tsx`, `index.css`) | 3 | 517 | 顶层应用组装与全局样式 |
+| **`src/` 源码合计** | **155** | **25,913** | 含生产代码 **138** 个文件（**22,905** 行）+ 测试 **17** 个文件（**3,008** 行） |
+| 工程配置与本地服务 (`vite.config.ts` 等) | 9 | 734 | 含 Vite 本地持久化与文件池 API 中间件（473 行） |
+
+## 相关设计文档
+
+- `PROJECT.md` — 产品定位与核心工作流
+- `FILE_PLAN.md` — 目录规划、三层依赖规则与核心数据流
+- `EVENT_AND_SUBCANVAS_PLAN.md` — 节点事件绑定与多子画布设计
+- `PAGINATION_AND_RIBBON_PLAN.md` — 节点内分页、Ribbon 工具栏与剪贴板设计
+- `MEDIA_PAGINATION_AND_LINKAGE_PLAN.md` — 多媒体多页翻页、关注列表与跨节点联动设计
+- `FILE_POOL_AND_SLIDE_COMPOSER_PLAN.md` — 文件池资源管理器与 `.slide.svg` 画板合成器设计
+- `PROJECT_RECONSTRUCTION_REPORT.md` — 项目开发历程与架构演进重建报告
