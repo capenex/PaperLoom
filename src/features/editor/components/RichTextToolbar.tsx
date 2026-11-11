@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent } from "react"
 import {
   Bold,
   Eraser,
@@ -11,14 +10,18 @@ import {
   Palette,
   Strikethrough,
   Underline,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
-import { Button } from '@/shared/components/ui/button'
-import { FONT_SIZE_OPTIONS } from '@/shared/lib/nodeDefaults'
-import type { PaperReference } from '@/shared/types/paper'
-import { LinkControl } from './LinkControl'
-import { ReferenceControl } from './ReferenceControl'
+import { Button } from "@/shared/components/ui/button"
+import {
+  SelectMenu,
+  type SelectMenuOption,
+} from "@/shared/components/ui/select-menu"
+import { FONT_SIZE_OPTIONS } from "@/shared/lib/nodeDefaults"
+import type { PaperReference } from "@/shared/types/paper"
+import { LinkControl } from "./LinkControl"
+import { ReferenceControl } from "./ReferenceControl"
 
 interface RichTextToolbarProps {
   readonly onCommand: (command: string, value?: string) => void
@@ -57,19 +60,30 @@ interface FontSizeSelectProps {
 }
 
 const TEXT_ACTIONS: readonly ToolbarAction[] = [
-  { command: 'bold', label: '加粗', icon: Bold },
-  { command: 'italic', label: '斜体', icon: Italic },
-  { command: 'underline', label: '下划线', icon: Underline },
-  { command: 'strikeThrough', label: '删除线', icon: Strikethrough },
-  { command: 'insertUnorderedList', label: '无序列表', icon: List },
-  { command: 'insertOrderedList', label: '有序列表', icon: ListOrdered },
+  { command: "bold", label: "加粗", icon: Bold },
+  { command: "italic", label: "斜体", icon: Italic },
+  { command: "underline", label: "下划线", icon: Underline },
+  { command: "strikeThrough", label: "删除线", icon: Strikethrough },
+  { command: "insertUnorderedList", label: "无序列表", icon: List },
+  { command: "insertOrderedList", label: "有序列表", icon: ListOrdered },
 ]
+
+const FONT_SIZE_MENU_OPTIONS: readonly SelectMenuOption[] =
+  FONT_SIZE_OPTIONS.map((size) => ({
+    value: String(size),
+    label: `${size}px`,
+  }))
 
 function ToolbarDivider() {
   return <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
 }
 
-function FormatButton({ command, label, icon: Icon, onCommand }: Readonly<FormatButtonProps>) {
+function FormatButton({
+  command,
+  label,
+  icon: Icon,
+  onCommand,
+}: Readonly<FormatButtonProps>) {
   return (
     <Button
       type="button"
@@ -142,30 +156,22 @@ function ColorControls({ onCommand }: Readonly<ColorControlsProps>) {
 }
 
 function FontSizeSelect({ onFontSize }: Readonly<FontSizeSelectProps>) {
-  const [value, setValue] = useState('')
-
-  function handleChange(event: ChangeEvent<HTMLSelectElement>): void {
-    const size = Number(event.target.value)
-    setValue('')
-    if (size <= 0) return
-    onFontSize(size)
-  }
-
   return (
-    <select
-      aria-label="字号"
+    <SelectMenu
+      ariaLabel="字号"
       title="字号"
-      value={value}
-      className="h-6 rounded-md border border-slate-200 bg-white px-1 text-xs text-slate-600 outline-none focus:border-primary"
-      onChange={handleChange}
-    >
-      <option value="">字号</option>
-      {FONT_SIZE_OPTIONS.map((size) => (
-        <option key={size} value={size}>
-          {size}px
-        </option>
-      ))}
-    </select>
+      value=""
+      placeholder="字号"
+      options={FONT_SIZE_MENU_OPTIONS}
+      preserveSelectionOnMouseDown={true}
+      triggerClassName="h-6 bg-white px-2 text-xs font-medium text-slate-600 tabular-nums"
+      contentClassName="w-24"
+      onValueChange={(nextValue) => {
+        const size = Number(nextValue)
+        if (size <= 0) return
+        onFontSize(size)
+      }}
+    />
   )
 }
 
@@ -214,7 +220,7 @@ export function RichTextToolbar({
           event.preventDefault()
         }}
         onClick={() => {
-          onCommand('insertPageBreak')
+          onCommand("insertPageBreak")
         }}
       >
         <FilePlus2 className="size-3.5 text-primary" aria-hidden="true" />

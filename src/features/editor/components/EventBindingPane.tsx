@@ -1,8 +1,12 @@
-import { ExternalLink, Trash2 } from 'lucide-react'
-import { cn } from 'cn'
+import { ExternalLink, Trash2 } from "lucide-react"
+import { cn } from "cn"
 
-import { Button } from '@/shared/components/ui/button'
-import { resolveBindingTarget } from '@/shared/lib/nodeEvents'
+import { Button } from "@/shared/components/ui/button"
+import {
+  SelectMenu,
+  type SelectMenuOption,
+} from "@/shared/components/ui/select-menu"
+import { resolveBindingTarget } from "@/shared/lib/nodeEvents"
 import type {
   CanvasId,
   NodeContent,
@@ -11,17 +15,16 @@ import type {
   NodeEventTrigger,
   NodeId,
   PaperNode,
-} from '@/shared/types/paper'
-import type { ActionOptionValue } from '../lib/eventBindingUi'
+} from "@/shared/types/paper"
+import type { ActionOptionValue } from "../lib/eventBindingUi"
 import {
-  SELECT_BOX_CLS,
   actionToOptionValue,
   formatBindingTabLabel,
   isActionOption,
   optionValueToAction,
   ribbonFieldCls,
-} from '../lib/eventBindingUi'
-import { SwitchNodePageControls } from './SwitchNodePageControls'
+} from "../lib/eventBindingUi"
+import { SwitchNodePageControls } from "./SwitchNodePageControls"
 
 interface EventBindingPaneProps {
   readonly node: PaperNode | undefined
@@ -34,6 +37,77 @@ interface EventBindingPaneProps {
   readonly onSaveVisibleEvents: (events: readonly NodeEventBinding[]) => void
   readonly onEnterCanvas: (canvasId: CanvasId) => void
   readonly onArmPick: (sourceNodeId: NodeId, bindingId: string) => void
+}
+
+const TARGET_OPTIONS: readonly SelectMenuOption<NodeEventTarget>[] = [
+  { value: "node", label: "节点本身" },
+  { value: "reference", label: "节点内引用链接", triggerLabel: "引用链接" },
+  { value: "reference-popup", label: "引用预览小窗", triggerLabel: "预览小窗" },
+]
+
+function buildTriggerOptions(
+  target: NodeEventTarget,
+): readonly SelectMenuOption<NodeEventTrigger>[] {
+  if (target === "node") {
+    return [
+      { value: "double-click", label: "双击" },
+      {
+        value: "second-click",
+        label: "选中后再次单击",
+        triggerLabel: "再次单击",
+      },
+      { value: "click", label: "单击" },
+    ]
+  }
+  return [
+    { value: "double-click", label: "双击" },
+    { value: "click", label: "单击" },
+  ]
+}
+
+function buildActionOptions(
+  kind: NodeContent["kind"] | undefined,
+  actionVal: ActionOptionValue,
+): readonly SelectMenuOption<ActionOptionValue>[] {
+  const options: SelectMenuOption<ActionOptionValue>[] = []
+  if (kind === undefined || kind === "text" || actionVal === "edit-node") {
+    options.push({
+      value: "edit-node",
+      label: "开始编辑节点内容",
+      triggerLabel: "编辑节点内容",
+      badge: "文本",
+    })
+  }
+  options.push(
+    {
+      value: "open-canvas",
+      label: "展开支线画布",
+      badge: "子画布",
+    },
+    {
+      value: "return-parent-canvas",
+      label: "返回上级画布",
+      badge: "导航",
+    },
+    {
+      value: "open-detail",
+      label: "弹出详情视图（大图/PDF/全文）",
+      triggerLabel: "弹出详情视图",
+      badge: "详情",
+    },
+    {
+      value: "open-reference-preview",
+      label: "弹出引用预览小窗",
+      triggerLabel: "引用预览小窗",
+      badge: "预览",
+    },
+    {
+      value: "switch-node-page",
+      label: "切换目标节点页码",
+      badge: "联动",
+    },
+  )
+  return options
 }
 
 function EventBindingTabsRow({
@@ -56,7 +130,11 @@ function EventBindingTabsRow({
   }
 
   return (
-    <div role="tablist" aria-label="当前节点事件列表" className="flex h-8 items-center gap-1.5">
+    <div
+      role="tablist"
+      aria-label="当前节点事件列表"
+      className="flex h-8 items-center gap-1.5"
+    >
       {events.map((binding, index) => {
         const isCurrent = binding.id === activeBindingId
         return (
@@ -69,10 +147,10 @@ function EventBindingTabsRow({
               onSelectBinding(binding.id)
             }}
             className={cn(
-              'inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors',
+              "inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors",
               isCurrent
-                ? 'border-primary bg-primary text-white shadow-2xs'
-                : 'border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50',
+                ? "border-primary bg-primary text-white shadow-2xs"
+                : "border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50",
             )}
           >
             {formatBindingTabLabel(index, binding)}
@@ -100,45 +178,31 @@ function TargetAndTriggerSelects({
 }>) {
   return (
     <>
-      <label className={fieldCls}>
+      <div className={fieldCls}>
         <span className="shrink-0 text-slate-500">触发对象</span>
-        <select
-          aria-label="事件触发对象"
+        <SelectMenu
+          ariaLabel="事件触发对象"
           disabled={!hasBinding}
           value={target}
-          onChange={(e) => {
-            const val = e.target.value
-            if (val === 'node' || val === 'reference' || val === 'reference-popup') {
-              onChangeTarget(val)
-            }
-          }}
-          className={SELECT_BOX_CLS}
-        >
-          <option value="node">节点本身</option>
-          <option value="reference">节点内引用链接</option>
-          <option value="reference-popup">引用预览小窗</option>
-        </select>
-      </label>
+          options={TARGET_OPTIONS}
+          triggerClassName="min-w-22"
+          contentClassName="w-44"
+          onValueChange={onChangeTarget}
+        />
+      </div>
 
-      <label className={fieldCls}>
+      <div className={fieldCls}>
         <span className="shrink-0 text-slate-500">触发时机</span>
-        <select
-          aria-label="事件触发时机"
+        <SelectMenu
+          ariaLabel="事件触发时机"
           disabled={!hasBinding}
           value={trigger}
-          onChange={(e) => {
-            const val = e.target.value
-            if (val === 'double-click' || val === 'second-click' || val === 'click') {
-              onChangeTrigger(val)
-            }
-          }}
-          className={SELECT_BOX_CLS}
-        >
-          <option value="double-click">双击</option>
-          {target === 'node' && <option value="second-click">选中后再次单击</option>}
-          <option value="click">单击</option>
-        </select>
-      </label>
+          options={buildTriggerOptions(target)}
+          triggerClassName="min-w-20"
+          contentClassName="w-40"
+          onValueChange={onChangeTrigger}
+        />
+      </div>
     </>
   )
 }
@@ -150,34 +214,27 @@ function ActionTypeSelect({
   fieldCls,
   onSelect,
 }: Readonly<{
-  kind: NodeContent['kind'] | undefined
+  kind: NodeContent["kind"] | undefined
   actionVal: ActionOptionValue
   hasBinding: boolean
   fieldCls: string
   onSelect: (value: ActionOptionValue) => void
 }>) {
   return (
-    <label className={fieldCls}>
+    <div className={fieldCls}>
       <span className="shrink-0 text-slate-500">执行动作</span>
-      <select
-        aria-label="事件执行动作"
+      <SelectMenu
+        ariaLabel="事件执行动作"
         disabled={!hasBinding}
         value={actionVal}
-        onChange={(e) => {
-          if (isActionOption(e.target.value)) onSelect(e.target.value)
+        options={buildActionOptions(kind, actionVal)}
+        triggerClassName="min-w-36"
+        contentClassName="w-64"
+        onValueChange={(nextValue) => {
+          if (isActionOption(nextValue)) onSelect(nextValue)
         }}
-        className={SELECT_BOX_CLS}
-      >
-        {(kind === undefined || kind === 'text' || actionVal === 'edit-node') && (
-          <option value="edit-node">开始编辑节点内容</option>
-        )}
-        <option value="open-canvas">展开支线画布</option>
-        <option value="return-parent-canvas">返回上级画布</option>
-        <option value="open-detail">弹出详情视图（大图/PDF/全文）</option>
-        <option value="open-reference-preview">弹出引用预览小窗</option>
-        <option value="switch-node-page">切换目标节点页码</option>
-      </select>
-    </label>
+      />
+    </div>
   )
 }
 
@@ -212,7 +269,7 @@ function EventBindingFieldsRow({
   onDelete,
   onEnterCanvas,
 }: Readonly<{
-  kind: NodeContent['kind'] | undefined
+  kind: NodeContent["kind"] | undefined
   binding: NodeEventBinding | undefined
   sourceNodeId: NodeId | undefined
   watchlistNodes: readonly PaperNode[]
@@ -223,10 +280,12 @@ function EventBindingFieldsRow({
   onEnterCanvas: (canvasId: CanvasId) => void
 }>) {
   const hasBinding = binding !== undefined
-  const target: NodeEventTarget = binding === undefined ? 'node' : resolveBindingTarget(binding)
-  const trigger: NodeEventTrigger = binding === undefined ? 'double-click' : binding.trigger
+  const target: NodeEventTarget =
+    binding === undefined ? "node" : resolveBindingTarget(binding)
+  const trigger: NodeEventTrigger =
+    binding === undefined ? "double-click" : binding.trigger
   const actionVal: ActionOptionValue =
-    binding === undefined ? 'open-canvas' : actionToOptionValue(binding.action)
+    binding === undefined ? "open-canvas" : actionToOptionValue(binding.action)
   const fieldCls = ribbonFieldCls(hasBinding)
 
   return (
@@ -239,7 +298,9 @@ function EventBindingFieldsRow({
         onChangeTarget={(nextTarget) => {
           if (binding === undefined) return
           const nextTrigger =
-            nextTarget !== 'node' && binding.trigger === 'second-click' ? 'click' : binding.trigger
+            nextTarget !== "node" && binding.trigger === "second-click"
+              ? "click"
+              : binding.trigger
           onReplaceBinding({ target: nextTarget, trigger: nextTrigger })
         }}
         onChangeTrigger={(nextTrigger) => {
@@ -253,27 +314,26 @@ function EventBindingFieldsRow({
         hasBinding={hasBinding}
         fieldCls={fieldCls}
         onSelect={(val) => {
-          if (binding === undefined || sourceNodeId === undefined) return
-          onReplaceBinding({ action: optionValueToAction(val, binding.action, sourceNodeId) })
+          if (binding !== undefined && sourceNodeId !== undefined) {
+            onReplaceBinding({ action: optionValueToAction(val, binding.action, sourceNodeId) })
+          }
         }}
       />
 
-      {binding?.action.type === 'open-canvas' && (
+      {binding?.action.type === "open-canvas" && (
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="h-8 border-primary/30 bg-primary/10 px-3 text-[13px] font-semibold text-primary hover:bg-primary/15"
-          onClick={() => {
-            if (binding.action.type === 'open-canvas') onEnterCanvas(binding.action.canvasId)
-          }}
+          onClick={() => { if (binding.action.type === "open-canvas") onEnterCanvas(binding.action.canvasId) }}
         >
           <ExternalLink className="size-4" aria-hidden="true" />
           进入支线
         </Button>
       )}
 
-      {binding?.action.type === 'switch-node-page' && (
+      {binding?.action.type === "switch-node-page" && (
         <SwitchNodePageControls
           action={binding.action}
           bindingId={binding.id}
@@ -305,7 +365,12 @@ export function EventBindingPane({
   onArmPick,
 }: Readonly<EventBindingPaneProps>) {
   return (
-    <div className="flex h-[70px] flex-col justify-between gap-1.5">
+    <div
+      className={cn(
+        "flex h-[70px] flex-col justify-between gap-1.5",
+        node === undefined && "pointer-events-none opacity-45 select-none",
+      )}
+    >
       <EventBindingTabsRow
         events={events}
         activeBindingId={activeBinding?.id ?? null}
@@ -315,16 +380,17 @@ export function EventBindingPane({
         kind={node?.content.kind}
         binding={activeBinding}
         sourceNodeId={node?.id}
-        canvasNodes={canvasNodes}
         watchlistNodes={watchlistNodes}
+        canvasNodes={canvasNodes}
         onReplaceBinding={onReplaceBinding}
         onArmPick={onArmPick}
-        onEnterCanvas={onEnterCanvas}
         onDelete={() => {
-          if (activeBinding !== undefined) {
-            onSaveVisibleEvents(events.filter((i) => i.id !== activeBinding.id))
-          }
+          if (activeBinding === undefined) return
+          onSaveVisibleEvents(
+            events.filter((item) => item.id !== activeBinding.id),
+          )
         }}
+        onEnterCanvas={onEnterCanvas}
       />
     </div>
   )

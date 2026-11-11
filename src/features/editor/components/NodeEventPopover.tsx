@@ -1,7 +1,11 @@
-import { ExternalLink, GitBranch, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { ExternalLink, GitBranch, Plus, RotateCcw, Trash2 } from "lucide-react"
 
-import { createId } from '@/shared/lib/id'
-import { resolveBindingTarget } from '@/shared/lib/nodeEvents'
+import {
+  SelectMenu,
+  type SelectMenuOption,
+} from "@/shared/components/ui/select-menu"
+import { createId } from "@/shared/lib/id"
+import { resolveBindingTarget } from "@/shared/lib/nodeEvents"
 import type {
   CanvasId,
   NodeContent,
@@ -9,18 +13,10 @@ import type {
   NodeEventBinding,
   NodeEventTarget,
   NodeEventTrigger,
-} from '@/shared/types/paper'
-
-type ActionOptionValue =
-  | 'edit-node'
-  | 'open-canvas'
-  | 'return-parent-canvas'
-  | 'open-detail'
-  | 'open-reference-preview'
-  | 'switch-node-page'
+} from "@/shared/types/paper"
 
 interface NodeEventPopoverProps {
-  readonly kind: NodeContent['kind']
+  readonly kind: NodeContent["kind"]
   readonly events: readonly NodeEventBinding[]
   readonly defaultEvents: readonly NodeEventBinding[]
   readonly onUpdateEvents: (events: readonly NodeEventBinding[]) => void
@@ -28,34 +24,83 @@ interface NodeEventPopoverProps {
   readonly onBindBranchCanvas: () => void
 }
 
-const SELECT_CLS =
-  'min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none'
+type ActionOptionValue =
+  | "edit-node"
+  | "open-canvas"
+  | "return-parent-canvas"
+  | "open-detail"
+  | "open-reference-preview"
+  | "switch-node-page"
+
+const TARGET_OPTIONS: readonly SelectMenuOption<NodeEventTarget>[] = [
+  { value: "node", label: "节点本身" },
+  { value: "reference", label: "节点内引用链接" },
+  { value: "reference-popup", label: "引用预览小窗" },
+]
+
+function buildTriggerOptions(
+  target: NodeEventTarget,
+): readonly SelectMenuOption<NodeEventTrigger>[] {
+  if (target === "node") {
+    return [
+      { value: "double-click", label: "双击" },
+      { value: "second-click", label: "选中后再次单击" },
+      { value: "click", label: "单击" },
+    ]
+  }
+  return [
+    { value: "double-click", label: "双击" },
+    { value: "click", label: "单击" },
+  ]
+}
+
+function buildActionOptions(
+  kind: NodeContent["kind"],
+  action: NodeEventAction,
+): readonly SelectMenuOption<ActionOptionValue>[] {
+  const options: SelectMenuOption<ActionOptionValue>[] = []
+  if (kind === "text" || action.type === "edit-node") {
+    options.push({ value: "edit-node", label: "开始编辑节点内容" })
+  }
+  options.push(
+    { value: "open-canvas", label: "展开支线画布" },
+    { value: "return-parent-canvas", label: "返回上级画布" },
+    { value: "open-detail", label: "弹出详情视图（大图/PDF/全文）" },
+    { value: "open-reference-preview", label: "弹出引用预览小窗" },
+  )
+  if (action.type === "switch-node-page") {
+    options.push({ value: "switch-node-page", label: "切换目标页码" })
+  }
+  return options
+}
 
 function actionToOptionValue(action: NodeEventAction): ActionOptionValue {
-  return isActionOption(action.type) ? action.type : 'open-detail'
+  return isActionOption(action.type) ? action.type : "open-detail"
 }
 
 function optionValueToAction(
   value: ActionOptionValue,
   existingAction: NodeEventAction,
 ): NodeEventAction {
-  if (value === 'switch-node-page') return existingAction
-  if (value === 'edit-node') return { type: 'edit-node' }
-  if (value === 'return-parent-canvas') return { type: 'return-parent-canvas' }
-  if (value === 'open-detail') return { type: 'open-detail' }
-  if (value === 'open-reference-preview') return { type: 'open-reference-preview' }
-  const canvasId = existingAction.type === 'open-canvas' ? existingAction.canvasId : createId()
-  return { type: 'open-canvas', canvasId }
+  if (value === "switch-node-page") return existingAction
+  if (value === "edit-node") return { type: "edit-node" }
+  if (value === "return-parent-canvas") return { type: "return-parent-canvas" }
+  if (value === "open-detail") return { type: "open-detail" }
+  if (value === "open-reference-preview")
+    return { type: "open-reference-preview" }
+  const canvasId =
+    existingAction.type === "open-canvas" ? existingAction.canvasId : createId()
+  return { type: "open-canvas", canvasId }
 }
 
 function isActionOption(val: string): val is ActionOptionValue {
   return (
-    val === 'edit-node' ||
-    val === 'open-canvas' ||
-    val === 'return-parent-canvas' ||
-    val === 'open-detail' ||
-    val === 'open-reference-preview' ||
-    val === 'switch-node-page'
+    val === "edit-node" ||
+    val === "open-canvas" ||
+    val === "return-parent-canvas" ||
+    val === "open-detail" ||
+    val === "open-reference-preview" ||
+    val === "switch-node-page"
   )
 }
 
@@ -70,22 +115,17 @@ function TargetRow({
 }>) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">触发对象</span>
-      <select
-        aria-label="事件触发对象"
+      <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">
+        触发对象
+      </span>
+      <SelectMenu
+        ariaLabel="事件触发对象"
         value={target}
-        onChange={(e) => {
-          const val = e.target.value
-          if (val === 'node' || val === 'reference' || val === 'reference-popup') {
-            onChangeTarget(val)
-          }
-        }}
-        className={SELECT_CLS}
-      >
-        <option value="node">节点本身</option>
-        <option value="reference">节点内引用链接</option>
-        <option value="reference-popup">引用预览小窗</option>
-      </select>
+        options={TARGET_OPTIONS}
+        triggerClassName="flex-1 bg-white"
+        contentClassName="w-48"
+        onValueChange={onChangeTarget}
+      />
       <button
         type="button"
         aria-label="删除此事件绑定"
@@ -110,22 +150,17 @@ function TriggerRow({
 }>) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">触发时机</span>
-      <select
-        aria-label="事件触发时机"
+      <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">
+        触发时机
+      </span>
+      <SelectMenu
+        ariaLabel="事件触发时机"
         value={trigger}
-        onChange={(e) => {
-          const val = e.target.value
-          if (val === 'double-click' || val === 'second-click' || val === 'click') {
-            onChangeTrigger(val)
-          }
-        }}
-        className={SELECT_CLS}
-      >
-        <option value="double-click">双击</option>
-        {target === 'node' && <option value="second-click">选中后再次单击</option>}
-        <option value="click">单击</option>
-      </select>
+        options={buildTriggerOptions(target)}
+        triggerClassName="flex-1 bg-white"
+        contentClassName="w-48"
+        onValueChange={onChangeTrigger}
+      />
     </div>
   )
 }
@@ -136,34 +171,25 @@ function ActionRow({
   onChangeAction,
   onEnterCanvas,
 }: Readonly<{
-  kind: NodeContent['kind']
+  kind: NodeContent["kind"]
   action: NodeEventAction
   onChangeAction: (value: ActionOptionValue) => void
   onEnterCanvas: (canvasId: CanvasId) => void
 }>) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">执行动作</span>
-      <select
-        aria-label="事件执行动作"
+      <span className="w-14 shrink-0 text-[11px] font-medium text-slate-500">
+        执行动作
+      </span>
+      <SelectMenu
+        ariaLabel="事件执行动作"
         value={actionToOptionValue(action)}
-        onChange={(e) => {
-          if (isActionOption(e.target.value)) onChangeAction(e.target.value)
-        }}
-        className={SELECT_CLS}
-      >
-        {(kind === 'text' || action.type === 'edit-node') && (
-          <option value="edit-node">开始编辑节点内容</option>
-        )}
-        <option value="open-canvas">展开支线画布</option>
-        <option value="return-parent-canvas">返回上级画布</option>
-        <option value="open-detail">弹出详情视图（大图/PDF/全文）</option>
-        <option value="open-reference-preview">弹出引用预览小窗</option>
-        {action.type === 'switch-node-page' && (
-          <option value="switch-node-page">切换目标页码</option>
-        )}
-      </select>
-      {action.type === 'open-canvas' && (
+        options={buildActionOptions(kind, action)}
+        triggerClassName="flex-1 bg-white"
+        contentClassName="w-56"
+        onValueChange={onChangeAction}
+      />
+      {action.type === "open-canvas" && (
         <button
           type="button"
           onClick={() => {
@@ -184,8 +210,10 @@ function PopoverHeader({
   onResetDefaults,
 }: Readonly<{ onAdd: () => void; onResetDefaults: () => void }>) {
   return (
-    <div className="mb-2.5 flex items-center justify-between">
-      <span className="text-xs font-bold text-slate-800">节点与引用事件绑定</span>
+    <div className="mb-2 flex items-center justify-between">
+      <span className="text-xs font-bold text-slate-800">
+        节点与引用事件绑定
+      </span>
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -216,7 +244,7 @@ function EventBindingItem({
   onDelete,
   onEnterCanvas,
 }: Readonly<{
-  kind: NodeContent['kind']
+  kind: NodeContent["kind"]
   binding: NodeEventBinding
   onChange: (next: NodeEventBinding) => void
   onDelete: () => void
@@ -229,7 +257,9 @@ function EventBindingItem({
         target={target}
         onChangeTarget={(nextTarget) => {
           const trigger =
-            nextTarget !== 'node' && binding.trigger === 'second-click' ? 'click' : binding.trigger
+            nextTarget !== "node" && binding.trigger === "second-click"
+              ? "click"
+              : binding.trigger
           onChange({ ...binding, target: nextTarget, trigger })
         }}
         onDelete={onDelete}
@@ -245,7 +275,10 @@ function EventBindingItem({
         kind={kind}
         action={binding.action}
         onChangeAction={(val) => {
-          onChange({ ...binding, action: optionValueToAction(val, binding.action) })
+          onChange({
+            ...binding,
+            action: optionValueToAction(val, binding.action),
+          })
         }}
         onEnterCanvas={onEnterCanvas}
       />
@@ -256,11 +289,11 @@ function EventBindingItem({
 function EmptyEventsState({
   kind,
   onBind,
-}: Readonly<{ kind: NodeContent['kind']; onBind: () => void }>) {
+}: Readonly<{ kind: NodeContent["kind"]; onBind: () => void }>) {
   const hint =
-    kind === 'title'
-      ? '纯标题节点专为触发事件设计，当前暂未绑定事件'
-      : '当前无绑定事件'
+    kind === "title"
+      ? "纯标题节点专为触发事件设计，当前暂未绑定事件"
+      : "当前无绑定事件"
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 py-4 text-center">
       <span className="text-xs text-slate-400">{hint}</span>
@@ -278,13 +311,23 @@ function EmptyEventsState({
 
 /** 节点事件编辑浮窗主体 */
 export function NodeEventPopover(props: Readonly<NodeEventPopoverProps>) {
-  const { kind, events, defaultEvents, onUpdateEvents, onEnterCanvas, onBindBranchCanvas } = props
+  const {
+    kind,
+    events,
+    defaultEvents,
+    onUpdateEvents,
+    onEnterCanvas,
+    onBindBranchCanvas,
+  } = props
   const handleAdd = (): void => {
     const action: NodeEventAction =
-      kind === 'image' || kind === 'file'
-        ? { type: 'open-detail' }
-        : { type: 'open-canvas', canvasId: createId() }
-    onUpdateEvents([...events, { id: createId(), target: 'node', trigger: 'double-click', action }])
+      kind === "image" || kind === "file"
+        ? { type: "open-detail" }
+        : { type: "open-canvas", canvasId: createId() }
+    onUpdateEvents([
+      ...events,
+      { id: createId(), target: "node", trigger: "double-click", action },
+    ])
   }
 
   return (
