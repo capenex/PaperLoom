@@ -6,6 +6,7 @@ import {
   buildInboxUrl,
   classifyInboxFileName,
   detectInboxExtension,
+  isSlideSvgPath,
   uploadBlobToInbox,
 } from '@/shared/lib/inbox'
 import type { InboxEntry } from '@/shared/lib/inbox'
@@ -20,7 +21,7 @@ import type {
   StaticFileFormat,
 } from '@/shared/types/paper'
 import type { AddImageNodeTarget } from '../data/document'
-import { computeIdealImageBox } from './fitNodeSize'
+import { computeIdealImageBox, computeIdealSlideBox } from './fitNodeSize'
 import { fetchInboxTextContent, hasInboxPayloadInDataTransfer } from './inboxClient'
 import { detectStaticFileFormat } from './staticMarkdown'
 
@@ -212,6 +213,12 @@ function computeEnvelopeBox(
   let maxW = 0
   let maxH = 0
   for (const item of items) {
+    if (isSlideSvgPath(item.src) || isSlideSvgPath(item.alt)) {
+      const box = computeIdealSlideBox(item.naturalWidth, item.naturalHeight)
+      maxW = Math.max(maxW, box.width)
+      maxH = Math.max(maxH, box.height)
+      continue
+    }
     if (item.naturalWidth !== undefined && item.naturalHeight !== undefined) {
       const box = computeIdealImageBox(item.naturalWidth, item.naturalHeight)
       maxW = Math.max(maxW, box.width)
@@ -312,29 +319,26 @@ export async function dispatchInboxEntryToCanvas(
   }
 }
 
+/**
+ * 外部文件拖入画布：全部存入文件池（res/inbox/ 并同步至已打开文件夹）；
+ * 除图片文件（及 .slide.svg）直接生成/追加画布节点外，其余文件仅存入文件池并返回 'saved-to-pool'。
+ */
 export async function ingestExternalFileToCanvas(
   file: File,
   hitNode: PaperNode | undefined,
   altKey: boolean,
   target: AddImageNodeTarget | undefined,
   callbacks: Readonly<CanvasFileDropCallbacks>,
-): Promise<void> {
+): Promise<'added-to-canvas' | 'saved-to-pool'> {
   const category = classifyInboxFileName(file.name)
   const folder = callbacks.currentInboxFolder ?? ''
+  const src = await uploadBlobToInbox(file, file.name, Date.now(), folder, true, false)
 
-  if (category === 'document') {
-    await uploadBlobToInbox(file, file.name, Date.now(), folder, true, false)
-    const text = await file.text()
-    const format = detectStaticFileFormat(file.name)
-    if (hitNode?.content.kind === 'file' && callbacks.onUpdateFile !== undefined) {
-      callbacks.onUpdateFile(hitNode.id, file.name, format, text)
-    } else {
-      callbacks.onAddFile?.({ kind: 'file', fileName: file.name, format, text }, target)
-    }
-    return
+  const isImgOrSlide = category === 'image' || category === 'slide' || isImageFile(file)
+  if (!isImgOrSlide) {
+    return 'saved-to-pool'
   }
 
-  const src = await uploadBlobToInbox(file, file.name, Date.now(), folder, true, false)
   const prefix = '/res/inbox/'
   const rawRel = src.startsWith(prefix) ? src.slice(prefix.length) : file.name
   const relPath = rawRel
@@ -348,11 +352,12 @@ export async function ingestExternalFileToCanvas(
       path: relPath,
       name: file.name,
       ext: detectInboxExtension(file.name),
-      category: category === 'other' && isImageFile(file) ? 'image' : category,
+      category: category === 'slide' ? 'slide' : 'image',
     },
     hitNode,
     altKey,
     target,
     callbacks,
   )
+  return 'added-to-canvas'
 }

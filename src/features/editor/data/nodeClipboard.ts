@@ -28,7 +28,17 @@ function cloneNodeContent(content: NodeContent): NodeContent {
   if (content.kind === 'title') {
     return { kind: 'title', title: content.title, subtitle: content.subtitle }
   }
-  if (content.kind === 'image') return { kind: 'image', src: content.src, alt: content.alt }
+  if (content.kind === 'image') {
+    return {
+      kind: 'image',
+      src: content.src,
+      alt: content.alt,
+      ...(content.items === undefined
+        ? {}
+        : { items: content.items.map((item) => ({ ...item })) }),
+      ...(content.activeIndex === undefined ? {} : { activeIndex: content.activeIndex }),
+    }
+  }
   return {
     kind: 'file',
     fileName: content.fileName,

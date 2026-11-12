@@ -1,18 +1,13 @@
+import {
+  getBoundDirectoryHandle,
+  hasBoundDirectoryHandle,
+  setBoundDirectoryHandle,
+} from '@/shared/lib/workspaceFolderSync'
 import type { PaperDocument } from '@/shared/types/paper'
 import { createExportFiles } from './generate'
 
-declare global {
-  interface Window {
-    showDirectoryPicker?: (options?: {
-      readonly mode?: 'read' | 'readwrite'
-    }) => Promise<FileSystemDirectoryHandle>
-  }
-}
-
-let cachedDirectoryHandle: FileSystemDirectoryHandle | null = null
-
 export function hasCachedExportDirectory(): boolean {
-  return cachedDirectoryHandle !== null
+  return hasBoundDirectoryHandle()
 }
 
 async function writeFile(
@@ -105,15 +100,16 @@ async function cleanupOrphanedExportAssets(
 }
 
 async function pickOrReuseDirectory(reuseCached: boolean): Promise<FileSystemDirectoryHandle> {
-  if (reuseCached && cachedDirectoryHandle !== null) {
-    return cachedDirectoryHandle
+  const existing = getBoundDirectoryHandle()
+  if (reuseCached && existing !== null) {
+    return existing
   }
   const picker = window.showDirectoryPicker
   if (picker === undefined) {
     throw new Error('当前浏览器不支持写入文件夹，请使用最新版 Chrome 或 Edge')
   }
   const root = await picker({ mode: 'readwrite' })
-  cachedDirectoryHandle = root
+  setBoundDirectoryHandle(root)
   return root
 }
 

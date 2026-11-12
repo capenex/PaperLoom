@@ -18,11 +18,26 @@ import type {
 } from '@/shared/types/paper'
 import { splitRichTextPages } from '../lib/markdownRichText'
 
-/** 初始文档及切换为多媒体节点时默认展示的图片内容 */
+/** 旧版遗留的失效示例图片路径（用于自动识别并清理失效占位图） */
+export const LEGACY_BROKEN_SAMPLE_IMAGE_SRC = '/media/oxcq2cmh.jpg'
+
+const SAMPLE_IMAGE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#eef2ff"/><stop offset="100%" stop-color="#e0e7ff"/></linearGradient></defs><rect width="640" height="400" fill="url(#bg)"/><circle cx="490" cy="110" r="42" fill="#c7d2fe"/><path d="M80 340 L230 190 L355 300 L455 215 L575 340 Z" fill="#a5b4fc"/><path d="M190 340 L335 205 L495 340 Z" fill="#818cf8" opacity="0.85"/></svg>'
+
+/** 初始文档默认展示的示例图片内容（内联矢量图，离线恒可用） */
 export const SAMPLE_IMAGE: ImageNodeContent = {
   kind: 'image',
-  src: '/media/oxcq2cmh.jpg',
+  src: `data:image/svg+xml;utf8,${encodeURIComponent(SAMPLE_IMAGE_SVG)}`,
   alt: '示例图片',
+}
+
+/** 切换为多媒体节点但尚无历史图片时的空白初始状态 */
+const EMPTY_IMAGE_CONTENT: ImageNodeContent = {
+  kind: 'image',
+  src: '',
+  alt: '',
+  items: [],
+  activeIndex: 0,
 }
 
 const SAMPLE_TITLE: TitleNodeContent = {
@@ -38,6 +53,30 @@ const SAMPLE_FILE: FileNodeContent = {
   text: '// 点击顶部「选择文件」导入本地代码或 Markdown\nexport function greet(name: string): string {\n  return `Hello, ${name}!`\n}',
 }
 
+/** 记录每个节点在各类型下的最近一次内容，保证切换节点类型再切回时不丢失原内容 */
+const nodeKindContentCache = new Map<string, NodeContent>()
+
+function kindCacheKey(
+  document: PaperDocument,
+  nodeId: NodeId,
+  kind: NodeContent['kind'],
+): string {
+  return `${document.meta.id}:${nodeId}:${kind}`
+}
+
+function isLegacyBrokenImageContent(content: NodeContent): boolean {
+  return content.kind === 'image' && content.src === LEGACY_BROKEN_SAMPLE_IMAGE_SRC
+}
+
+export function rememberNodeKindContent(
+  document: PaperDocument,
+  nodeId: NodeId,
+  content: NodeContent,
+): void {
+  if (isLegacyBrokenImageContent(content)) return
+  nodeKindContentCache.set(kindCacheKey(document, nodeId, content.kind), content)
+}
+
 function replaceNodes(document: PaperDocument, nodes: readonly PaperNode[]): PaperDocument {
   return {
     ...document,
@@ -47,7 +86,7 @@ function replaceNodes(document: PaperDocument, nodes: readonly PaperNode[]): Pap
 }
 
 function defaultContentForKind(kind: NodeContent['kind']): NodeContent {
-  if (kind === 'image') return SAMPLE_IMAGE
+  if (kind === 'image') return EMPTY_IMAGE_CONTENT
   if (kind === 'title') return SAMPLE_TITLE
   if (kind === 'file') return SAMPLE_FILE
   return { kind: 'text', richText: '' }
@@ -98,6 +137,9 @@ export function updateTextNodeContent(
       ? pageCount - 1
       : Math.min(Math.max(prevIndex, 0), pageCount - 1)
 
+  const nextContent: NodeContent = { ...target.content, richText, activePageIndex }
+  rememberNodeKindContent(document, nodeId, nextContent)
+
   const nodes = document.nodes.map((node) => {
     if (node.id !== nodeId) return node
     const events =
@@ -106,7 +148,7 @@ export function updateTextNodeContent(
         : node.events
     return {
       ...node,
-      content: { ...target.content, richText, activePageIndex },
+      content: nextContent,
       ...(events === undefined ? {} : { events }),
     }
   })
@@ -124,13 +166,14 @@ export function updateTitleNodeContent(
   const target = document.nodes.find((node) => node.id === nodeId)
   if (target === undefined || target.content.kind !== 'title') return document
   const content: TitleNodeContent = { kind: 'title', title, subtitle }
+  rememberNodeKindContent(document, nodeId, content)
   return replaceNodes(
     document,
     document.nodes.map((node): PaperNode => (node.id === nodeId ? { ...node, content } : node)),
   )
 }
 
-/** 切换节点类型（富文本 / 纯标题 / 多媒体 / 静态文件）；类型未变时保持原样 */
+/** 切换节点类型（富文本 / 纯标题 / 多媒体 / 静态文件）；保留并恢复该节点在各类型下的历史内容 */
 export function changeNodeKind(
   document: PaperDocument,
   nodeId: NodeId,
@@ -138,7 +181,12 @@ export function changeNodeKind(
 ): PaperDocument {
   const target = document.nodes.find((node) => node.id === nodeId)
   if (target === undefined || target.content.kind === kind) return document
-  const content = defaultContentForKind(kind)
+  rememberNodeKindContent(document, nodeId, target.content)
+  const cached = nodeKindContentCache.get(kindCacheKey(document, nodeId, kind))
+  const content =
+    cached !== undefined && !isLegacyBrokenImageContent(cached)
+      ? cached
+      : defaultContentForKind(kind)
   const events = mergeEventsForNewKind(target, kind)
   return replaceNodes(
     document,
@@ -156,7 +204,14 @@ export function updateImageNodeContent(
   alt: string,
 ): PaperDocument {
   if (!document.nodes.some((node) => node.id === nodeId)) return document
-  const content: ImageNodeContent = { kind: 'image', src, alt }
+  const content: ImageNodeContent = {
+    kind: 'image',
+    src,
+    alt,
+    items: src.trim() === '' ? [] : [{ src, alt }],
+    activeIndex: 0,
+  }
+  rememberNodeKindContent(document, nodeId, content)
   return replaceNodes(
     document,
     document.nodes.map((node): PaperNode => (node.id === nodeId ? { ...node, content } : node)),
@@ -173,6 +228,7 @@ export function updateFileNodeContent(
 ): PaperDocument {
   if (!document.nodes.some((node) => node.id === nodeId)) return document
   const content: FileNodeContent = { kind: 'file', fileName, format, text }
+  rememberNodeKindContent(document, nodeId, content)
   return replaceNodes(
     document,
     document.nodes.map((node): PaperNode => (node.id === nodeId ? { ...node, content } : node)),

@@ -28,7 +28,7 @@ export function NodeEditWindow(props: Readonly<NodeEditWindowProps>) {
     <dialog
       open
       aria-label="编辑富文本节点内容"
-      className="absolute inset-auto bottom-0 left-1/2 z-30 m-0 flex h-64 w-[min(780px,90%)] max-h-none max-w-none -translate-x-1/2 cursor-default flex-col overflow-hidden rounded-t-2xl border-2 border-b-0 border-slate-300 bg-white p-0 shadow-[0_-16px_48px_-12px_rgba(15,23,42,0.18)] outline-none animate-in slide-in-from-bottom-4 duration-200"
+      className="absolute inset-auto bottom-8 left-1/2 z-30 m-0 flex h-64 w-[min(780px,90%)] max-h-none max-w-none -translate-x-1/2 cursor-default flex-col overflow-hidden rounded-2xl border-2 border-slate-300 bg-white p-0 shadow-[0_20px_50px_-12px_rgba(15,23,42,0.22)] outline-none animate-in slide-in-from-bottom-4 duration-200"
       onClick={(event) => {
         event.stopPropagation()
       }}

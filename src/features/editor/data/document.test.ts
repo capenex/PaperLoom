@@ -107,6 +107,16 @@ void test('updateTextNodeContent, changeNodeKind, updateImageNodeContent, and up
   doc = changeNodeKind(doc, rootId, 'text')
   assert.equal(doc.nodes.find((n) => n.id === rootId)?.content.kind, 'text')
 
+  doc = changeNodeKind(doc, rootId, 'image')
+  const restoredRoot = doc.nodes.find((n) => n.id === rootId)
+  assert.equal(restoredRoot?.content.kind, 'image')
+  if (restoredRoot?.content.kind === 'image') {
+    assert.equal(restoredRoot.content.src, 'blob:custom-image')
+    assert.equal(restoredRoot.content.alt, '自定义图片')
+  }
+
+  doc = changeNodeKind(doc, rootId, 'text')
+
   doc = updateNodeLayout(doc, rootId, { width: 320, height: 180 })
   assert.equal(doc.nodes.find((n) => n.id === rootId)?.layout.width, 320)
   assert.equal(doc.nodes.find((n) => n.id === rootId)?.layout.height, 180)

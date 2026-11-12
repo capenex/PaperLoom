@@ -51,7 +51,7 @@ function PreviewBody({ reference }: Readonly<{ reference: PaperReference }>) {
   )
 }
 
-/** 单击引用锚点后的预览弹窗：再点击弹窗内容进入右侧详情 */
+/** 单击引用锚点后的预览弹窗：再点击弹窗内容进入左侧详情 */
 export function ReferencePreviewPopup(props: Readonly<ReferencePreviewPopupProps>) {
   const { preview, onOpenDetail, onDoubleClickDetail, onClose } = props
   useEffect(() => {
@@ -82,7 +82,7 @@ export function ReferencePreviewPopup(props: Readonly<ReferencePreviewPopupProps
       </header>
       <button
         type="button"
-        title="触发预览小窗绑定事件（默认在右侧展开）"
+        title="触发预览小窗绑定事件（默认在左侧展开）"
         className="block w-full cursor-pointer bg-slate-50 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
         onClick={onOpenDetail}
         onDoubleClick={onDoubleClickDetail}
@@ -91,8 +91,8 @@ export function ReferencePreviewPopup(props: Readonly<ReferencePreviewPopupProps
       </button>
       <footer className="px-3 py-1.5 text-[11px] text-slate-400">
         {reference.kind === 'pdf'
-          ? '点击触发小窗事件（默认右侧展开） · 可在「⚡ 事件」中自定义'
-          : '点击在右侧展开 · 可在「⚡ 事件」中自定义'}
+          ? '点击触发小窗事件（默认左侧展开） · 可在「⚡ 事件」中自定义'
+          : '点击在左侧展开 · 可在「⚡ 事件」中自定义'}
       </footer>
     </dialog>
   )

@@ -1,6 +1,6 @@
-/** 导出包内演示器的本地引用交互：单击弹预览、点击弹窗进右侧详情、PDF 双击直达引用页 */
+/** 导出包内演示器的本地引用交互：单击弹预览、点击弹窗进左侧详情、PDF 双击直达引用页 */
 export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------------------------------------------------
-  // 本地引用：单击弹预览，点击弹窗进右侧详情，PDF 双击直达全文引用页
+  // 本地引用：单击弹预览，点击弹窗进左侧详情，PDF 双击直达全文引用页
   // --------------------------------------------------------------------------
   var REF_KIND_ATTR = 'data-pl-ref'
   var REF_PAGE_ATTR = 'data-pl-page'
@@ -67,8 +67,8 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
       }
     }
     popHint.textContent = ref.kind === 'pdf'
-      ? '点击在右侧展开 · 双击链接跳转全文引用页'
-      : '点击在右侧展开'
+      ? '点击在左侧展开 · 双击链接跳转全文引用页'
+      : '点击在左侧展开'
     pop.classList.add('is-open')
     var rect = anchor.getBoundingClientRect()
     var x = Math.min(Math.max(8, rect.left), window.innerWidth - pop.offsetWidth - 8)

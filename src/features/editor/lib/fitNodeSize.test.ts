@@ -11,6 +11,7 @@ import {
 import type { ImageNodeContent, ImageSlideItem, PaperNode } from '@/shared/types/paper'
 import {
   computeIdealImageBox,
+  computeIdealSlideBox,
   estimateFittedNodeSize,
   fitNodeSize,
   IMAGE_FIT_MAX_HEIGHT,
@@ -35,13 +36,19 @@ function imageContent(items: readonly ImageSlideItem[]): ImageNodeContent {
   return { kind: 'image', src: first.src, alt: first.alt, items, activeIndex: 0 }
 }
 
-void test('image fit constants match the golden visual frame contract', () => {
+void test('image fit constants and MIN_NODE_HEIGHT=40 match the contract', () => {
+  assert.equal(MIN_NODE_HEIGHT, 40)
   assert.equal(IMAGE_FIT_TARGET_LONG_EDGE, 360)
   assert.equal(IMAGE_FIT_SQUARE_EDGE, 320)
   assert.equal(IMAGE_FIT_MIN_WIDTH, 160)
   assert.equal(IMAGE_FIT_MAX_WIDTH, 440)
   assert.equal(IMAGE_FIT_MIN_HEIGHT, 120)
   assert.equal(IMAGE_FIT_MAX_HEIGHT, 360)
+})
+
+void test('computeIdealSlideBox defaults 16:9 pseudo-image slides to 560x315', () => {
+  assert.deepEqual(computeIdealSlideBox(960, 540), { width: 560, height: 315 })
+  assert.deepEqual(computeIdealSlideBox(0, 0), { width: 560, height: 315 })
 })
 
 void test('computeIdealImageBox corrects near-square images to the 320 square box', () => {

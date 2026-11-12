@@ -91,9 +91,9 @@ function buildActionOptions(
     },
     {
       value: "open-detail",
-      label: "弹出详情视图（大图/PDF/全文）",
-      triggerLabel: "弹出详情视图",
-      badge: "详情",
+      label: "弹出左栏详情（大图/PDF/全文）",
+      triggerLabel: "弹出左栏详情",
+      badge: "左栏",
     },
     {
       value: "open-reference-preview",

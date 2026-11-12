@@ -77,14 +77,18 @@ export function createReferenceAnchorHtml(reference: PaperReference): string {
 }
 
 /** 把引用信息写回已有锚点（浏览器 createLink 命令只生成 href） */
-export function applyReferenceAttributes(anchor: HTMLAnchorElement, reference: PaperReference): void {
+export function applyReferenceAttributes(anchor: Element, reference: PaperReference): void {
   anchor.setAttribute(REFERENCE_KIND_ATTR, reference.kind)
   anchor.removeAttribute('target')
   anchor.removeAttribute('rel')
-  if (reference.page !== undefined) {
+  if (reference.page === undefined) {
+    anchor.removeAttribute(REFERENCE_PAGE_ATTR)
+  } else {
     anchor.setAttribute(REFERENCE_PAGE_ATTR, String(reference.page))
   }
-  if (reference.previewSrc !== undefined) {
+  if (reference.previewSrc === undefined) {
+    anchor.removeAttribute(REFERENCE_PREVIEW_ATTR)
+  } else {
     anchor.setAttribute(REFERENCE_PREVIEW_ATTR, reference.previewSrc)
   }
 }

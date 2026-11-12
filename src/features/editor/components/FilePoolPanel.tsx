@@ -26,7 +26,7 @@ interface FilePoolPanelProps {
   readonly pool: FilePoolController
   readonly onCreateNewSlide: (folderPath: string) => void
   readonly onEditSlide: (relPath: string) => void
-  readonly onQuickInsertEntry: (entry: InboxEntry) => void
+  readonly onPreviewEntry: (entry: InboxEntry) => void
 }
 
 function FolderBreadcrumbs({
@@ -217,11 +217,11 @@ function FilePoolHeader({
 function FilePoolEntryList({
   pool,
   onEditSlide,
-  onQuickInsertEntry,
+  onPreviewEntry,
 }: Readonly<{
   pool: FilePoolController
   onEditSlide: (relPath: string) => void
-  onQuickInsertEntry: (entry: InboxEntry) => void
+  onPreviewEntry: (entry: InboxEntry) => void
 }>) {
   if (pool.visibleEntries.length === 0) {
     return (
@@ -253,7 +253,7 @@ function FilePoolEntryList({
             void pool.deleteEntry(item)
           }}
           onEditSlide={onEditSlide}
-          onQuickInsertToCanvas={onQuickInsertEntry}
+          onPreviewEntry={onPreviewEntry}
         />
       ))}
     </>
@@ -290,7 +290,7 @@ export function FilePoolPanel({
   pool,
   onCreateNewSlide,
   onEditSlide,
-  onQuickInsertEntry,
+  onPreviewEntry,
 }: Readonly<FilePoolPanelProps>) {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   if (!pool.isOpen) return null
@@ -367,7 +367,7 @@ export function FilePoolPanel({
         }}
       />
       <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
-        <FilePoolEntryList pool={pool} onEditSlide={onEditSlide} onQuickInsertEntry={onQuickInsertEntry} />
+        <FilePoolEntryList pool={pool} onEditSlide={onEditSlide} onPreviewEntry={onPreviewEntry} />
       </div>
       <FilePoolFooterBar feedback={pool.feedback} onClearFeedback={pool.clearFeedback} />
       <input ref={uploadInputRef} type="file" multiple tabIndex={-1} aria-hidden="true" className="hidden" onChange={handleUploadChange} />

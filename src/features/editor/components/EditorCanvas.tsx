@@ -1,7 +1,8 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { InboxEntry } from '@/shared/lib/inbox'
 import type { NodeSize } from '@/shared/lib/nodeDefaults'
+import { subscribeCanvasToast } from '@/shared/lib/workspaceFolderSync'
 import type {
   BreadcrumbItem,
   CanvasId,
@@ -19,6 +20,7 @@ import type { AddImageNodeTarget } from '../data/document'
 import { canAddParent } from '../data/document'
 import type { Point } from '../data/layout'
 import { useDocumentLayout } from '../hooks/useDocumentLayout'
+import { useImageNodeWheelZoom } from '../hooks/useImageNodeWheelZoom'
 import { useImagePasteDrop } from '../hooks/useImagePasteDrop'
 import { useNodeDrag } from '../hooks/useNodeDrag'
 import type { PendingNodeAction } from '../lib/pendingNodeAction'
@@ -99,9 +101,32 @@ function DropHintBanner() {
       className="pointer-events-none absolute inset-3 z-40 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/60 bg-primary/5 backdrop-blur-[1px]"
     >
       <span className="rounded-lg border border-primary/20 bg-white/95 px-4 py-2 text-xs font-medium text-primary shadow-md">
-        释放文件或文件夹以添加到画布或目标节点（存入 res/inbox/）
+        释放文件或文件夹：图片将创建节点，其余文件存入文件池（res/inbox/）
       </span>
     </div>
+  )
+}
+
+function CanvasToastBanner() {
+  const [toastText, setToastText] = useState('')
+  useEffect(() => {
+    let timer = 0
+    return subscribeCanvasToast((msg) => {
+      setToastText(msg)
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        setToastText('')
+      }, 2800)
+    })
+  }, [])
+  if (toastText === '') return null
+  return (
+    <output
+      aria-live="polite"
+      className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2 rounded-lg border border-emerald-200 bg-emerald-50/95 px-4 py-2 text-xs font-medium text-emerald-700 shadow-md"
+    >
+      {toastText}
+    </output>
   )
 }
 
@@ -164,7 +189,9 @@ function pendingInterception(props: Readonly<EditorCanvasProps>, document: Paper
 export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
   const { document } = props
   const stageRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const layout = useDocumentLayout(document)
+  useImageNodeWheelZoom(containerRef, document, props.onFitNodeSize)
   const drag = useNodeDrag({ ...props, document, layout, stageRef })
   const imagePasteDrop = useImagePasteDrop({ ...props, layout, stageRef })
   const focusTarget = resolveFocusTarget(document, props.editingNodeId, layout)
@@ -184,6 +211,7 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
 
   return (
     <div
+      ref={containerRef}
       className="relative min-w-0 flex-1"
       onDragOver={imagePasteDrop.onDragOver}
       onDragLeave={imagePasteDrop.onDragLeave}
@@ -228,6 +256,7 @@ export function EditorCanvas(props: Readonly<EditorCanvasProps>) {
       </CanvasViewport>
       {props.pending !== null && <PendingHintBanner pending={props.pending} />}
       {imagePasteDrop.fileDropping && <DropHintBanner />}
+      <CanvasToastBanner />
     </div>
   )
 }

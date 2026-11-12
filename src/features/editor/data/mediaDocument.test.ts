@@ -93,6 +93,11 @@ void test('removeActiveImagePageFromNode deletes the active page and steps back'
   assert.equal(content.items?.length, 1)
   assert.equal(content.activeIndex, 0)
   assert.equal(content.src, '/b.png')
+
+  next = removeActiveImagePageFromNode(next, imageId)
+  content = imageContentOf(next, imageId)
+  assert.equal(content.items?.length, 0)
+  assert.equal(content.src, '')
   assert.equal(removeActiveImagePageFromNode(next, imageId), next)
 })
 

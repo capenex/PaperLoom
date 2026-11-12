@@ -13,7 +13,6 @@ import { useLinkCommands } from './useLinkCommands'
 export interface RichTextCommands {
   readonly runCommand: (command: string, value?: string) => void
   readonly changeFontSize: (sizePx: number) => void
-  readonly createLink: (url: string) => boolean
   readonly createReference: (reference: PaperReference) => void
   readonly rememberSelection: () => void
 }
@@ -38,7 +37,7 @@ export function useRichTextCommands(
       document.removeEventListener('selectionchange', rememberSelection)
     }
   }, [rememberSelection])
-  const { createLink, createReference } = useLinkCommands(
+  const { createReference } = useLinkCommands(
     editorRef,
     selectionRef,
     rememberSelection,
@@ -64,5 +63,5 @@ export function useRichTextCommands(
     [editorRef, onChange, pendingFontSizeRef, rememberSelection, selectionRef],
   )
 
-  return { runCommand, changeFontSize, createLink, createReference, rememberSelection }
+  return { runCommand, changeFontSize, createReference, rememberSelection }
 }

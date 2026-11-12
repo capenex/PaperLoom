@@ -5,10 +5,13 @@
  * 图片节点按黄金视觉框等比缩放，多页图片取所有页面理想框的最大包络。
  */
 
+import { isSlideSvgPath } from '@/shared/lib/inbox'
 import { resolveImageItems } from '@/shared/lib/mediaPages'
 import {
   DEFAULT_NODE_HEIGHT,
   DEFAULT_NODE_WIDTH,
+  DEFAULT_SLIDE_NODE_HEIGHT,
+  DEFAULT_SLIDE_NODE_WIDTH,
   MAX_NODE_HEIGHT,
   MAX_NODE_WIDTH,
   MIN_NODE_HEIGHT,
@@ -25,10 +28,10 @@ import type {
 } from '@/shared/types/paper'
 import { splitRichTextPages } from './markdownRichText'
 
-const CARD_PAD_X = 36
-const CARD_PAD_Y = 28
-const TITLE_PAD_X = 60
-const TITLE_PAD_Y = 48
+const CARD_PAD_X = 28
+const CARD_PAD_Y = 20
+const TITLE_PAD_X = 48
+const TITLE_PAD_Y = 32
 const COMFORT_TEXT_MAX_WIDTH = 460
 /** 多页节点右下方翻页器预留底部安全高度 */
 const PAGER_RESERVE_HEIGHT = 24
@@ -81,8 +84,8 @@ function estimateTitleSize(content: TitleNodeContent, fontSize: number): NodeSiz
   const innerWidth = Math.max(72, width - 36)
   const subLines =
     subtitle === '' ? 0 : Math.min(2, Math.max(1, Math.ceil(subWidth / innerWidth)))
-  const titleBlockH = title === '' ? 0 : Math.ceil(titleFont * 1.5)
-  const subBlockH = subtitle === '' ? 0 : 6 + Math.ceil(subLines * subFont * 1.45)
+  const titleBlockH = title === '' ? 0 : Math.ceil(titleFont * 1.45)
+  const subBlockH = subtitle === '' ? 0 : 6 + Math.ceil(subLines * subFont * 1.4)
 
   return {
     width,
@@ -111,7 +114,7 @@ function extractLinesFromHtml(richText: string): readonly ParsedTextLine[] {
 
   return lines.map((text, index) => ({
     text,
-    scale: index === 0 && hasH1 ? 1.5 : index === 0 && hasH2 ? 1.28 : 1,
+    scale: index === 0 && hasH1 ? 1.35 : index === 0 && hasH2 ? 1.18 : 1,
   }))
 }
 
@@ -123,7 +126,7 @@ function estimateSinglePageWidth(lines: readonly ParsedTextLine[], fontSize: num
     if (linePx > widestLine) widestLine = linePx
   }
   const targetMax = Math.min(MAX_NODE_WIDTH, Math.max(COMFORT_TEXT_MAX_WIDTH, widestLine * 0.65))
-  return clampWidth(Math.min(targetMax, widestLine + CARD_PAD_X + 8))
+  return clampWidth(Math.min(targetMax, widestLine + CARD_PAD_X + 6))
 }
 
 function estimateSinglePageHeightAtWidth(
@@ -138,7 +141,7 @@ function estimateSinglePageHeightAtWidth(
     const effectiveFont = fontSize * line.scale
     const linePx = estimateTextVisualWidth(line.text, effectiveFont)
     const wrappedCount = Math.max(1, Math.ceil(linePx / innerWidth))
-    contentHeight += wrappedCount * effectiveFont * 1.62 + 4
+    contentHeight += wrappedCount * effectiveFont * 1.55
   }
   return contentHeight + CARD_PAD_Y
 }
@@ -169,6 +172,24 @@ function estimateRichTextSize(content: TextNodeContent, fontSize: number): NodeS
     width: finalWidth,
     height: clampHeight(maxRawHeight + pagerExtra),
   }
+}
+
+/** 幻灯片伪图片（.slide.svg）的理想画布尺寸：默认按 560x315（16:9）呈现，保证图文排版清晰可读 */
+export function computeIdealSlideBox(naturalWidth?: number, naturalHeight?: number): NodeSize {
+  const valid =
+    typeof naturalWidth === 'number' &&
+    typeof naturalHeight === 'number' &&
+    Number.isFinite(naturalWidth) &&
+    Number.isFinite(naturalHeight) &&
+    naturalWidth > 0 &&
+    naturalHeight > 0
+  if (!valid) {
+    return { width: DEFAULT_SLIDE_NODE_WIDTH, height: DEFAULT_SLIDE_NODE_HEIGHT }
+  }
+  const ratio = naturalWidth / naturalHeight
+  const width = DEFAULT_SLIDE_NODE_WIDTH
+  const height = clampHeight(Math.round(width / ratio))
+  return { width: clampWidth(width), height }
 }
 
 /** 单张图片的黄金视觉框：近正方形修正为 320 边长，横竖图以 360 长边等比缩放并兜住短边下限 */
@@ -239,7 +260,15 @@ function fitImageEnvelope(content: ImageNodeContent, useDom: boolean): NodeSize 
   let maxHeight = 0
   let measured = false
   for (const item of items) {
+    const isSlide = isSlideSvgPath(item.src) || isSlideSvgPath(item.alt)
     const natural = storedNaturalSize(item) ?? (useDom ? findLoadedNaturalSize(item.src) : null)
+    if (isSlide) {
+      measured = true
+      const box = computeIdealSlideBox(natural?.width, natural?.height)
+      if (box.width > maxWidth) maxWidth = box.width
+      if (box.height > maxHeight) maxHeight = box.height
+      continue
+    }
     if (natural === null) continue
     measured = true
     const box = computeIdealImageBox(natural.width, natural.height)
@@ -290,7 +319,7 @@ function measureRichTextInDom(
   probe.style.lineHeight = '1.625'
   document.body.appendChild(probe)
 
-  let maxDomWidth = fallback.width
+  let maxDomWidth = MIN_NODE_WIDTH
   let measuredAny = false
   for (const pageHtml of pages) {
     if (pageHtml.trim() === '') continue
@@ -300,7 +329,7 @@ function measureRichTextInDom(
     const rect = probe.getBoundingClientRect()
     if (rect.width > 0 && rect.height > 0) {
       measuredAny = true
-      maxDomWidth = Math.max(maxDomWidth, rect.width + CARD_PAD_X + 6)
+      maxDomWidth = Math.max(maxDomWidth, Math.ceil(rect.width) + CARD_PAD_X + 4)
     }
   }
 
@@ -316,7 +345,8 @@ function measureRichTextInDom(
     probe.style.width = `${finalWidth - CARD_PAD_X}px`
     probe.style.maxWidth = 'none'
     probe.innerHTML = pageHtml
-    const pageH = Math.max(probe.scrollHeight, probe.getBoundingClientRect().height)
+    const rectH = probe.getBoundingClientRect().height
+    const pageH = Math.max(probe.scrollHeight, Math.ceil(rectH))
     if (pageH > maxWrappedHeight) maxWrappedHeight = pageH
   }
   probe.remove()
@@ -324,7 +354,7 @@ function measureRichTextInDom(
   const pagerExtra = pages.length > 1 ? PAGER_RESERVE_HEIGHT : 0
   return {
     width: finalWidth,
-    height: clampHeight(Math.max(maxWrappedHeight + CARD_PAD_Y + 4 + pagerExtra, fallback.height)),
+    height: clampHeight(maxWrappedHeight + CARD_PAD_Y + 2 + pagerExtra),
   }
 }
 

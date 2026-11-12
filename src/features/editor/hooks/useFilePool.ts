@@ -6,6 +6,7 @@ import {
   collectDocumentInboxUsage,
   rewriteDocumentInboxPaths,
 } from '@/shared/lib/inboxReferences'
+import { syncFilePoolToBoundDirectory } from '@/shared/lib/workspaceFolderSync'
 import type { NodeId, PaperDocument } from '@/shared/types/paper'
 import {
   createInboxFolder,
@@ -83,7 +84,7 @@ function useFilePoolMutations(deps: Readonly<PoolMutationDeps>) {
       try {
         for (const file of files) await uploadFileToInboxFolder(file, currentFolder)
         await refresh()
-        setFeedback(`已上传 ${files.length} 个文件`)
+        setFeedback(`已保存到文件池（共 ${files.length} 个文件）`)
       } catch {
         setFeedback('上传文件失败')
       } finally {
@@ -168,6 +169,28 @@ function useFilePoolMutations(deps: Readonly<PoolMutationDeps>) {
   return { uploadFiles, createFolder, renameEntry, moveEntryToFolder, deleteEntry, cleanupUnusedFiles }
 }
 
+function useInitialInboxFetch(
+  setEntries: (entries: readonly InboxEntry[]) => void,
+  setFeedback: (msg: string) => void,
+): void {
+  useEffect(() => {
+    let cancelled = false
+    void fetchInboxTree()
+      .then((nextEntries) => {
+        if (!cancelled) {
+          setEntries(nextEntries)
+          void syncFilePoolToBoundDirectory(nextEntries)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFeedback('读取文件池失败')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [setEntries, setFeedback])
+}
+
 export function useFilePool(
   document: PaperDocument,
   onReplaceDocument: (next: PaperDocument) => void,
@@ -188,6 +211,7 @@ export function useFilePool(
     try {
       const nextEntries = await fetchInboxTree()
       setEntries(nextEntries)
+      void syncFilePoolToBoundDirectory(nextEntries)
     } catch {
       setFeedback('读取文件池失败')
     } finally {
@@ -195,19 +219,7 @@ export function useFilePool(
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    void fetchInboxTree()
-      .then((nextEntries) => {
-        if (!cancelled) setEntries(nextEntries)
-      })
-      .catch(() => {
-        if (!cancelled) setFeedback('读取文件池失败')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  useInitialInboxFetch(setEntries, setFeedback)
 
   const setIsOpen = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {

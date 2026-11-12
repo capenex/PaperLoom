@@ -283,8 +283,8 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         }
         applyImagePage(imgIndex)
         var imageLabel = image.alt === '' ? '未命名图片' : image.alt
-        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，双击在右侧展开大图' + branchHint)
-        card.title = hasSubCanvas ? '双击展开支线画布；双击弹出右栏大图' : '双击弹出右栏大图'
+        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，双击在左侧展开大图' + branchHint)
+        card.title = hasSubCanvas ? '双击展开支线画布；双击弹出左栏大图' : '双击弹出左栏大图'
       } else if (content.kind === 'title') {
         var titleBox = document.createElement('div')
         titleBox.className = 'node-title-box'
@@ -332,8 +332,8 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         fPre.textContent = typeof content.text === 'string' ? content.text : ''
         card.appendChild(fHead)
         card.appendChild(fPre)
-        card.setAttribute('aria-label', '静态文件节点：' + (content.fileName || '未命名文件') + (branchHint || '，双击在右侧展开查看全文'))
-        card.title = hasSubCanvas ? '双击展开支线画布' : '双击在右侧展开查看全文'
+        card.setAttribute('aria-label', '静态文件节点：' + (content.fileName || '未命名文件') + (branchHint || '，双击在左侧展开查看全文'))
+        card.title = hasSubCanvas ? '双击展开支线画布' : '双击在左侧展开查看全文'
       } else {
         var labelText = '空白节点'
         var richText = content.richText
@@ -425,9 +425,9 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   var detailCollapse = document.createElement('button')
   detailCollapse.type = 'button'
   detailCollapse.className = 'detail-collapse'
-  detailCollapse.setAttribute('aria-label', '收起右侧详情')
-  detailCollapse.title = '收起右侧详情'
-  detailCollapse.textContent = '›'
+  detailCollapse.setAttribute('aria-label', '收起左侧详情')
+  detailCollapse.title = '收起左侧详情'
+  detailCollapse.textContent = '‹'
   var detailImage = document.createElement('img')
   detailImage.alt = ''
   detailImage.draggable = false
@@ -505,15 +505,15 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   var popBody = document.createElement('button')
   popBody.type = 'button'
   popBody.className = 'ref-pop-body'
-  popBody.setAttribute('aria-label', '在右侧展开')
+  popBody.setAttribute('aria-label', '在左侧展开')
   var popHint = document.createElement('div')
   popHint.className = 'ref-pop-hint'
   pop.appendChild(popHead)
   pop.appendChild(popBody)
   pop.appendChild(popHint)
 
-  app.appendChild(canvas)
   app.appendChild(detail)
+  app.appendChild(canvas)
   app.appendChild(pop)
   document.title = data.document.meta.title || 'PaperLoom'
 `

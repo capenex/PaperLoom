@@ -65,7 +65,7 @@ function buildActionOptions(
   options.push(
     { value: "open-canvas", label: "展开支线画布" },
     { value: "return-parent-canvas", label: "返回上级画布" },
-    { value: "open-detail", label: "弹出详情视图（大图/PDF/全文）" },
+    { value: "open-detail", label: "弹出左栏详情（大图/PDF/全文）" },
     { value: "open-reference-preview", label: "弹出引用预览小窗" },
   )
   if (action.type === "switch-node-page") {

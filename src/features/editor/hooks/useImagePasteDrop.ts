@@ -10,6 +10,7 @@ import type {
   StaticFileFormat,
 } from '@/shared/types/paper'
 import type { InboxEntry } from '@/shared/lib/inbox'
+import { emitCanvasToast } from '@/shared/lib/workspaceFolderSync'
 import type { AddImageNodeTarget } from '../data/document'
 import type { DocumentLayout, Point } from '../data/layout'
 import { cardIdAtPoint, measureWorldZoom } from '../lib/dragHitTest'
@@ -119,6 +120,7 @@ function handleCanvasDrop(
 
   void (async () => {
     let failed = false
+    let savedToPoolOnlyCount = 0
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index]
       if (file === undefined) continue
@@ -129,13 +131,17 @@ function handleCanvasDrop(
             : { anchor: { x: baseAnchor.x, y: baseAnchor.y + index * MULTI_DROP_OFFSET_Y } }
           : { parentId: hitNodeId }
       try {
-        await ingestExternalFileToCanvas(file, hitNode, event.altKey, target, callbacks)
+        const result = await ingestExternalFileToCanvas(file, hitNode, event.altKey, target, callbacks)
+        if (result === 'saved-to-pool') savedToPoolOnlyCount += 1
       } catch {
         failed = true
       }
     }
     if (options.onRefreshInbox !== undefined) {
       await options.onRefreshInbox()
+    }
+    if (savedToPoolOnlyCount > 0) {
+      emitCanvasToast('已保存到文件池')
     }
     if (failed) window.alert(INBOX_SAVE_FAILED)
   })()

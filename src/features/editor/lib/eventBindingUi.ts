@@ -36,7 +36,7 @@ export const ACTION_LABELS: Readonly<Record<ActionOptionValue, string>> = {
   'edit-node': '编辑内容',
   'open-canvas': '展开支线',
   'return-parent-canvas': '返回上级',
-  'open-detail': '弹出详情',
+  'open-detail': '弹出左栏详情',
   'open-reference-preview': '预览小窗',
   'switch-node-page': '切换目标页码',
 }

@@ -11,7 +11,7 @@ function clampDetailWidth(percent: number): number {
 }
 
 function widthPercentAt(clientX: number): number {
-  return ((window.innerWidth - clientX) / window.innerWidth) * 100
+  return (clientX / window.innerWidth) * 100
 }
 
 interface DetailResizeHandleProps {
@@ -43,9 +43,9 @@ export function DetailResizeHandle({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    if (event.key === 'ArrowLeft') {
+    if (event.key === 'ArrowRight') {
       onWidthPercentChange(clampDetailWidth(widthPercent + KEYBOARD_STEP_PERCENT))
-    } else if (event.key === 'ArrowRight') {
+    } else if (event.key === 'ArrowLeft') {
       onWidthPercentChange(clampDetailWidth(widthPercent - KEYBOARD_STEP_PERCENT))
     } else {
       return
@@ -59,7 +59,7 @@ export function DetailResizeHandle({
       aria-orientation="vertical"
       aria-label="拖动调整面板宽度"
       tabIndex={0}
-      className="absolute left-0 top-0 z-10 h-full w-3 -translate-x-1/2 cursor-col-resize touch-none outline-none hover:bg-primary/40 focus-visible:bg-primary/60"
+      className="absolute top-0 right-0 z-10 h-full w-3 translate-x-1/2 cursor-col-resize touch-none outline-none hover:bg-primary/40 focus-visible:bg-primary/60"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

@@ -42,6 +42,7 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
           <ProjectPackageControls
             document={editor.document}
             onRestoreDocument={editor.replaceDocument}
+            onRefreshFilePool={editor.filePool.refresh}
             filePoolOpen={editor.filePool.isOpen}
             onToggleFilePool={() => {
               editor.filePool.setIsOpen((prev) => !prev)
@@ -100,16 +101,20 @@ function AppHeader({ editor }: Readonly<EditorSectionProps>) {
 function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
   return (
     <main className="relative min-h-0 flex-1">
-      <FilePoolPanel
-        pool={editor.filePool}
-        onCreateNewSlide={(folderPath) => {
-          editor.openNewSlideComposer(folderPath)
-        }}
-        onEditSlide={editor.openEditSlideComposer}
-        onQuickInsertEntry={editor.quickInsertInboxEntry}
-      />
       <Editor
         document={editor.activeDocument}
+        filePoolSlot={
+          <FilePoolPanel
+            pool={editor.filePool}
+            onCreateNewSlide={(folderPath) => {
+              editor.openNewSlideComposer(folderPath)
+            }}
+            onEditSlide={editor.openEditSlideComposer}
+            onPreviewEntry={(entry) => {
+              editor.previewInboxEntry(entry, editor.openCustomDetail)
+            }}
+          />
+        }
         activeCanvasId={editor.activeCanvasId}
         activeHostNodeId={editor.activeHostNodeId}
         breadcrumbs={editor.breadcrumbs}
@@ -118,6 +123,7 @@ function EditorWorkspace({ editor }: Readonly<EditorSectionProps>) {
         expandedMediaNodeId={editor.expandedMediaNodeId}
         detailMediaNodeId={editor.detailMediaNodeId}
         detailReference={editor.detailReference}
+        detailCustom={editor.detailCustom}
         inboxEntries={editor.filePool.entries}
         currentInboxFolder={editor.filePool.currentFolder}
         onRefreshInbox={editor.filePool.refresh}

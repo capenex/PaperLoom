@@ -1,6 +1,5 @@
 /** 富文本编辑的 DOM 工具：集中封装浏览器命令、选区保存与链接处理 */
 
-import { escapeHtmlAttribute, escapeHtmlText } from '@/shared/lib/html'
 import {
   applyReferenceAttributes,
   createReferenceAnchorHtml,
@@ -13,12 +12,14 @@ import {
   insertMarkdownPageBreak,
   toggleMarkdownListPrefix,
 } from './markdownRichText'
-import { collectMarkdownSyntaxSpans } from './markdownSyntaxSpans'
+import {
+  collectInlineMathRanges,
+  collectMarkdownSyntaxSpans,
+  type MarkdownSyntaxSpan,
+} from './markdownSyntaxSpans'
 import { placeCaretAt } from './markdownShortcuts'
 
 const FONT_SIZE_MARKER = '7'
-const SAFE_LINK_PATTERN = /^(?:https?:|mailto:|tel:|#|\/|\.{1,2}\/)/iu
-const HAS_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/iu
 const CLEARABLE_FORMAT_SELECTOR = 'a, font, span, b, strong, i, em, u, s, del, strike, sub, sup'
 
 function execEditorCommand(command: string, value?: string): boolean {
@@ -30,7 +31,7 @@ function execEditorCommand(command: string, value?: string): boolean {
 
 export function emitHtml(
   editor: HTMLDivElement | null,
-  onChange: (html: string) => void,
+  onChange?: (html: string) => void,
   pendingFontSize?: number | null,
 ): void {
   if (editor === null) return
@@ -38,7 +39,7 @@ export function emitHtml(
     normalizeFontSizeTags(editor, pendingFontSize)
   }
   const compiled = compileMarkdownRichTextHtml(editor.innerHTML)
-  onChange(compiled)
+  onChange?.(compiled)
 }
 
 export function insertPlainText(editor: HTMLDivElement | null, text: string): void {
@@ -53,15 +54,6 @@ function hardenLinks(editor: HTMLDivElement): void {
     anchor.setAttribute('target', '_blank')
     anchor.setAttribute('rel', 'noopener noreferrer')
   })
-}
-
-/** 补全裸域名并拒绝 javascript: 等危险协议 */
-export function normalizeLinkUrl(raw: string): string | null {
-  const value = raw.trim()
-  if (value === '') return null
-  if (SAFE_LINK_PATTERN.test(value)) return value
-  if (HAS_SCHEME_PATTERN.test(value)) return null
-  return `https://${value}`
 }
 
 /** 把浏览器命令生成的 font 字号标记就地改成内联 px 样式，并清理内部冲突的旧字号 */
@@ -136,10 +128,41 @@ function locateLineIndex(line: Node, index: number): { readonly node: Node; read
   return { node: line, offset: 0 }
 }
 
+function filterOutMathDelimiterSpans(
+  spans: readonly MarkdownSyntaxSpan[],
+  mathRanges: readonly MarkdownSyntaxSpan[],
+): readonly MarkdownSyntaxSpan[] {
+  if (mathRanges.length === 0) return spans
+  return spans.filter(
+    (span) =>
+      !mathRanges.some(
+        (m) =>
+          (span.start === m.start && span.end === m.start + 1) ||
+          (span.start === m.end - 1 && span.end === m.end),
+      ),
+  )
+}
+
+function expandRangeForMathFormulas(
+  start: number,
+  end: number,
+  mathRanges: readonly MarkdownSyntaxSpan[],
+): { readonly start: number; readonly end: number } {
+  let nextStart = start
+  let nextEnd = end
+  for (const math of mathRanges) {
+    if (math.start < nextEnd && math.end > nextStart) {
+      nextStart = Math.min(nextStart, math.start)
+      nextEnd = Math.max(nextEnd, math.end)
+    }
+  }
+  return { start: nextStart, end: nextEnd }
+}
+
 /**
- * 阻止对 Markdown 语法字符（行首前缀、转义反斜杠、`**`/`$` 等定界符）挂载富文本样式：
+ * 阻止对 Markdown 语法字符（行首前缀、转义反斜杠、`**` 等定界符）挂载富文本样式：
  * - 选区边缘落在语法区间内时自动收缩到内容部分；仅选中语法则直接拦截；
- * - 单行选区内部仍含语法时拦截，保证语法不会被样式包裹；
+ * - 行内公式 `$...$` 作为不可分割整体，若选区触及公式则自动包入完整 `$...$`，允许对含公式文本挂引用或改字号；
  * - 转义对里只有第一个反斜杠受保护，被转义的第二个字符可随意设置字号、挂引用。
  */
 export function guardSelectionAgainstMarkdownSyntax(editor: HTMLDivElement): boolean {
@@ -150,7 +173,12 @@ export function guardSelectionAgainstMarkdownSyntax(editor: HTMLDivElement): boo
 
   const startLine = lineContainerOf(editor, range.startContainer)
   const endLine = lineContainerOf(editor, range.endContainer)
-  const startSpans = collectMarkdownSyntaxSpans(startLine.textContent ?? '')
+  const startText = startLine.textContent ?? ''
+  const startMathRanges = collectInlineMathRanges(startText)
+  const startSpans = filterOutMathDelimiterSpans(
+    collectMarkdownSyntaxSpans(startText),
+    startMathRanges,
+  )
   const startIndex = lineTextIndex(startLine, range.startContainer, range.startOffset)
 
   if (range.collapsed) {
@@ -166,8 +194,12 @@ export function guardSelectionAgainstMarkdownSyntax(editor: HTMLDivElement): boo
   for (const span of startSpans) {
     if (newStart >= span.start && newStart < span.end) newStart = span.end
   }
+  const endText = startLine === endLine ? startText : (endLine.textContent ?? '')
+  const endMathRanges = startLine === endLine ? startMathRanges : collectInlineMathRanges(endText)
   const endSpans =
-    startLine === endLine ? startSpans : collectMarkdownSyntaxSpans(endLine.textContent ?? '')
+    startLine === endLine
+      ? startSpans
+      : filterOutMathDelimiterSpans(collectMarkdownSyntaxSpans(endText), endMathRanges)
   const endIndex = lineTextIndex(endLine, range.endContainer, range.endOffset)
   let newEnd = endIndex
   for (const span of endSpans) {
@@ -175,6 +207,9 @@ export function guardSelectionAgainstMarkdownSyntax(editor: HTMLDivElement): boo
   }
 
   if (startLine === endLine) {
+    const expanded = expandRangeForMathFormulas(newStart, newEnd, startMathRanges)
+    newStart = expanded.start
+    newEnd = expanded.end
     if (newEnd <= newStart) return false
     if (startSpans.some((span) => span.start >= newStart && span.end <= newEnd)) return false
   }
@@ -260,60 +295,133 @@ export function runEditorCommand(
   emitHtml(editor, onChange)
 }
 
-/** 用 font 标记命令设置字号后，转换成内联 px 样式，便于导出包直接渲染 */
+function wrapSingleLineSelectionWithFontSize(
+  editor: HTMLDivElement,
+  range: Range,
+  sizePx: number,
+): boolean {
+  const startLine = lineContainerOf(editor, range.startContainer)
+  const endLine = lineContainerOf(editor, range.endContainer)
+  if (startLine !== endLine) return false
+
+  let cur: Node | null = range.commonAncestorContainer
+  while (cur !== null && cur !== startLine) {
+    if (
+      cur instanceof HTMLElement &&
+      cur.tagName === 'FONT' &&
+      (cur.textContent ?? '') === range.toString()
+    ) {
+      cur.setAttribute('style', `font-size: ${sizePx}px`)
+      return true
+    }
+    cur = cur.parentNode
+  }
+
+  const fragment = range.extractContents()
+  // eslint-disable-next-line typescript/no-deprecated -- 保持与浏览器 fontSize 命令一致的 font 标签结构
+  const fontEl = document.createElement('font')
+  fontEl.setAttribute('style', `font-size: ${sizePx}px`)
+  fontEl.appendChild(fragment)
+  fontEl.querySelectorAll('[style*="font-size"]').forEach((nested) => {
+    if (nested instanceof HTMLElement) {
+      nested.style.removeProperty('font-size')
+      if (nested.getAttribute('style')?.trim() === '') {
+        nested.removeAttribute('style')
+        if (nested.tagName === 'FONT' && nested.attributes.length === 0) {
+          unwrapElement(nested)
+        }
+      }
+    }
+  })
+  range.insertNode(fontEl)
+  const nextRange = document.createRange()
+  nextRange.selectNodeContents(fontEl)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(nextRange)
+  return true
+}
+
+/** 设置选中文本（包括含 `$...$` 公式的文本）的字号，转换成内联 px 样式便于导出包直接渲染 */
 export function applyFontSize(
   editor: HTMLDivElement | null,
   sizePx: number,
-  onChange: (html: string) => void,
+  onChange?: (html: string) => void,
 ): void {
   if (editor === null) return
   if (!guardSelectionAgainstMarkdownSyntax(editor)) return
-  execEditorCommand('fontSize', FONT_SIZE_MARKER)
-  normalizeFontSizeTags(editor, sizePx)
+  const selection = window.getSelection()
+  const range =
+    selection !== null && selection.rangeCount > 0 && !selection.isCollapsed
+      ? selection.getRangeAt(0)
+      : null
+  if (
+    range === null ||
+    !editor.contains(range.commonAncestorContainer) ||
+    !wrapSingleLineSelectionWithFontSize(editor, range, sizePx)
+  ) {
+    execEditorCommand('fontSize', FONT_SIZE_MARKER)
+    normalizeFontSizeTags(editor, sizePx)
+  }
   cleanBrowserArtifacts(editor)
   hardenLinks(editor)
   emitHtml(editor, onChange)
 }
 
-/** 有选中文字时把选中文字变成链接，否则插入一个以 URL 为文字的链接 */
-export function applyLink(
-  editor: HTMLDivElement | null,
-  url: string,
-  onChange: (html: string) => void,
-): void {
-  if (editor === null) return
-  if (!guardSelectionAgainstMarkdownSyntax(editor)) return
-  if (selectionInsideEditor(editor)) {
-    const selection = window.getSelection()
-    if (selection !== null && !selection.isCollapsed) {
-      execEditorCommand('createLink', url)
-      cleanBrowserArtifacts(editor)
-      hardenLinks(editor)
-      emitHtml(editor, onChange)
-      return
+function wrapSingleLineSelectionWithReference(
+  editor: HTMLDivElement,
+  range: Range,
+  reference: PaperReference,
+): boolean {
+  const startLine = lineContainerOf(editor, range.startContainer)
+  const endLine = lineContainerOf(editor, range.endContainer)
+  if (startLine !== endLine) return false
+
+  let cur: Node | null = range.commonAncestorContainer
+  while (cur !== null && cur !== startLine) {
+    if (
+      cur instanceof HTMLElement &&
+      cur.tagName === 'A' &&
+      (cur.textContent ?? '') === range.toString()
+    ) {
+      cur.setAttribute('href', reference.src)
+      applyReferenceAttributes(cur, reference)
+      return true
     }
+    cur = cur.parentNode
   }
 
-  const label = escapeHtmlText(url)
-  execEditorCommand('insertHTML', `<a href="${escapeHtmlAttribute(url)}">${label}</a>`)
-  cleanBrowserArtifacts(editor)
-  hardenLinks(editor)
-  emitHtml(editor, onChange)
+  const fragment = range.extractContents()
+  const anchor = document.createElement('a')
+  anchor.setAttribute('href', reference.src)
+  applyReferenceAttributes(anchor, reference)
+  anchor.appendChild(fragment)
+  anchor.querySelectorAll('a').forEach(unwrapElement)
+  range.insertNode(anchor)
+  const nextRange = document.createRange()
+  nextRange.selectNodeContents(anchor)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(nextRange)
+  return true
 }
 
-/** 有选中文字时把选中文字变成本地引用锚点，否则插入一个以引用名为文字的锚点 */
+/** 有选中文字时把选中文字变成本地引用锚点（支持含 `$...$` 公式或样式标签的选区），否则插入锚点 */
 export function applyReference(
   editor: HTMLDivElement | null,
   reference: PaperReference,
-  onChange: (html: string) => void,
+  onChange?: (html: string) => void,
 ): void {
   if (editor === null) return
   if (!guardSelectionAgainstMarkdownSyntax(editor)) return
   if (selectionInsideEditor(editor)) {
     const selection = window.getSelection()
-    if (selection !== null && !selection.isCollapsed) {
-      execEditorCommand('createLink', reference.src)
-      tagReferenceAnchors(editor, reference)
+    if (selection !== null && !selection.isCollapsed && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0)
+      if (!wrapSingleLineSelectionWithReference(editor, range, reference)) {
+        execEditorCommand('createLink', reference.src)
+        tagReferenceAnchors(editor, reference)
+      }
       cleanBrowserArtifacts(editor)
       emitHtml(editor, onChange)
       return

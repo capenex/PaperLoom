@@ -19,7 +19,9 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { cn } from 'cn'
 
+import { hasBoundDirectoryHandle } from '@/shared/lib/workspaceFolderSync'
 import type { PaperDocument } from '@/shared/types/paper'
+import { writeExportToDirectory } from '../data/writeDirectory'
 import { useExport } from '../hooks/useExport'
 import type { ExportStatus, ExportTarget } from '../hooks/useExport'
 import { useRestore } from '../hooks/useRestore'
@@ -28,6 +30,7 @@ import type { RestoreStatus } from '../hooks/useRestore'
 interface ProjectPackageControlsProps {
   readonly document: PaperDocument
   readonly onRestoreDocument: (document: PaperDocument) => void
+  readonly onRefreshFilePool?: (() => Promise<void>) | undefined
   readonly filePoolOpen?: boolean | undefined
   readonly onToggleFilePool?: (() => void) | undefined
   readonly onOpenNewSlideComposer?: (() => void) | undefined
@@ -243,7 +246,7 @@ function PackageDropdownMenu(props: Readonly<PackageDropdownMenuProps>) {
       <hr className="my-1 border-slate-100" />
       <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onRestoreFolder}>
         <StatusItemIcon status={restoreStatus} idle={FolderOpen} />
-        <span>文件夹复原</span>
+        <span>打开文件夹</span>
       </button>
       <button type="button" role="menuitem" disabled={busy} className={MENU_ITEM_CLASS} onClick={onRestoreZip}>
         <StatusItemIcon status={restoreStatus} idle={RotateCcw} />
@@ -346,10 +349,25 @@ function wrapCloseCallback(
   }
 }
 
+function useAutoSyncBoundDirectory(paperDocument: PaperDocument): void {
+  useEffect(() => {
+    if (!hasBoundDirectoryHandle()) return undefined
+    const timer = window.setTimeout(() => {
+      void writeExportToDirectory(paperDocument, true).catch(() => {
+        // 忽略后台自动写盘异常
+      })
+    }, 800)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [paperDocument])
+}
+
 /** 顶栏「开始」选项卡左侧的「文件」下拉菜单：集合文件池开关、幻灯片画板、导出/快速同步与工程复原 */
 export function ProjectPackageControls({
   document: paperDocument,
   onRestoreDocument,
+  onRefreshFilePool,
   filePoolOpen = false,
   onToggleFilePool,
   onOpenNewSlideComposer,
@@ -362,6 +380,8 @@ export function ProjectPackageControls({
   const exportCtrl = useExport()
   const restoreCtrl = useRestore(onRestoreDocument)
   const busy = exportCtrl.status === 'exporting' || restoreCtrl.status === 'restoring'
+
+  useAutoSyncBoundDirectory(paperDocument)
 
   const dismissAllFeedback = (): void => {
     exportCtrl.dismiss()
@@ -413,7 +433,9 @@ export function ProjectPackageControls({
           }}
           onRestoreFolder={() => {
             setOpen(false)
-            folderInputRef.current?.click()
+            void restoreCtrl.openWorkspaceFolder(paperDocument, onRefreshFilePool).then((res) => {
+              if (res === 'fallback-input') folderInputRef.current?.click()
+            })
           }}
           onRestoreZip={() => {
             setOpen(false)

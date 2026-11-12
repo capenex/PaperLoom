@@ -149,11 +149,12 @@ export function ImagePageControls({
     onReplaceImagePage,
     onAddImagePages,
   )
-  const items = resolveImageItems(content)
-  const activeIndex = resolveActiveImageIndex(content)
+  const items = resolveImageItems(content).filter((item) => item.src.trim() !== '')
+  const hasImage = items.length > 0
+  const activeIndex = hasImage ? Math.min(resolveActiveImageIndex(content), items.length - 1) : 0
   const activeItem = items[activeIndex]
   const activeAlt = activeItem?.alt ?? ''
-  const activeSrc = activeItem?.src ?? content.src
+  const activeSrc = activeItem?.src ?? ''
   const slideRelPath = isSlideSvgPath(activeSrc) ? normalizeInboxLookupPath(activeSrc) : null
 
   return (
@@ -196,7 +197,7 @@ export function ImagePageControls({
         type="button"
         variant="outline"
         size="sm"
-        disabled={items.length <= 1}
+        disabled={!hasImage}
         className={PAGE_BTN_CLS}
         onClick={onDeleteImagePage}
       >
@@ -204,7 +205,9 @@ export function ImagePageControls({
         删除当前页
       </Button>
       <span className="max-w-36 truncate text-xs text-slate-400">
-        {activeIndex + 1}/{items.length} · {activeAlt || '未命名图片'}
+        {hasImage
+          ? `${activeIndex + 1}/${items.length} · ${activeAlt || '未命名图片'}`
+          : '未选择图片'}
       </span>
       <input ref={replaceInputRef} type="file" accept="image/*" tabIndex={-1} aria-hidden="true" className="hidden" onChange={handleReplace} />
       <input ref={addInputRef} type="file" accept="image/*" multiple tabIndex={-1} aria-hidden="true" className="hidden" onChange={handleAdd} />

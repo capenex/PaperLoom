@@ -107,12 +107,12 @@ export const PRESENTER_REFERENCE_STYLES = `
 
 .detail-resize {
   position: absolute;
-  left: 0;
+  right: 0;
   top: 0;
   z-index: 11;
   width: 12px;
   height: 100%;
-  transform: translateX(-50%);
+  transform: translateX(50%);
   cursor: col-resize;
   touch-action: none;
 }

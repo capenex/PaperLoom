@@ -66,3 +66,38 @@ export function collectMarkdownSyntaxSpans(lineText: string): readonly MarkdownS
 
   return mergeSyntaxSpans(spans)
 }
+
+/**
+ * 收集一行源码中所有未转义的 `$...$` 行内公式完整区间 `[startIndex, endIndex]`。
+ * 供选区保护使用：选中含公式的文本或公式片段时，不拆散 `$` 定界符并允许整体挂引用与字号。
+ */
+export function collectInlineMathRanges(lineText: string): readonly MarkdownSyntaxSpan[] {
+  if (PAGE_BREAK_SYNTAX_LINE_PATTERN.test(lineText)) return []
+  const neutral = Array.from(lineText)
+  let i = 0
+  while (i < neutral.length) {
+    const next = neutral[i + 1]
+    if (neutral[i] === '\\' && next !== undefined && ASCII_PUNCTUATION_PATTERN.test(next)) {
+      neutral[i] = '\u0000'
+      neutral[i + 1] = '\u0000'
+      i += 2
+    } else {
+      i += 1
+    }
+  }
+
+  const ranges: MarkdownSyntaxSpan[] = []
+  let work = neutral.join('')
+  for (;;) {
+    const match = findEarliestInlineCompileMatch(work)
+    if (match === null) break
+    if (match.marker === '$') {
+      ranges.push({ start: match.startIndex, end: match.endIndex })
+    }
+    work =
+      work.slice(0, match.startIndex) +
+      '\u0000'.repeat(match.endIndex - match.startIndex) +
+      work.slice(match.endIndex)
+  }
+  return ranges
+}

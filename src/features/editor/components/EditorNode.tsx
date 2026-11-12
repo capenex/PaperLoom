@@ -228,11 +228,12 @@ function ImageNodeBody({ content, onSwitchPage }: Readonly<ImageNodeBodyProps>) 
   const items = resolveImageItems(content)
   const activeIndex = resolveActiveImageIndex(content)
   const isMultiPage = items.length > 1
+  const isEmpty = content.src.trim() === ''
 
-  if (failed || content.src.trim() === '') {
+  if (isEmpty || failed) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-slate-100/80 text-xs font-medium text-slate-400">
-        图片不可用
+        {isEmpty ? '未选择图片' : '图片不可用'}
       </div>
     )
   }

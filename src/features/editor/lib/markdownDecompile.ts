@@ -42,7 +42,8 @@ export function hasChildBlockElement(el: HTMLElement): boolean {
 function revertInlineMarkdownElements(root: HTMLElement): void {
   root.querySelectorAll('.pl-math').forEach((mathEl) => {
     const tex = mathEl.getAttribute('data-pl-math') ?? (mathEl.textContent ?? '')
-    mathEl.replaceWith(document.createTextNode(`$${escapeMarkdownSourceChars(tex)}$`))
+    // 公式内反斜杠是 TeX 语法而非 Markdown 转义，原样回填；写成 \\ 会被选区保护当成转义对而拒绝挂引用
+    mathEl.replaceWith(document.createTextNode(`$${tex}$`))
   })
   root.querySelectorAll('code').forEach((codeEl) => {
     if (codeEl.closest('pre') === null) {

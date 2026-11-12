@@ -37,7 +37,8 @@ const RESTORE_MIME_BY_EXT: Readonly<Record<string, string>> = {
   '.pdf': 'application/pdf',
 }
 
-const INLINE_PDF_ENTRY_PATTERN = /\[("(?:[^"\\]|\\.)*")\]\s*=\s*("(?:[^"\\]|\\.)*")/gu
+// 不用 (?:[^"\\]|\\.)* 交替：V8 会逐字符压回溯栈，大 PDF 的 base64（约 6MB 以上）会栈溢出
+const INLINE_PDF_ENTRY_PATTERN = /\[("[^"\\]*(?:\\.[^"\\]*)*")\]\s*=\s*("[^"\\]*(?:\\.[^"\\]*)*")/gu
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

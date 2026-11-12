@@ -134,6 +134,22 @@ void test('extractInlinePdfEntries recovers original bytes from toBase64Script o
   assert.deepStrictEqual(base64ToBytes(entry.base64), bytes)
 })
 
+void test('extractInlinePdfEntries handles multi-MB PDFs without overflowing the call stack', async () => {
+  // 大 PDF 的 base64 需完整提取：逐字符回溯的正则写法会在约 6MB 处栈溢出
+  const bytes = new Uint8Array(8 * 1024 * 1024)
+  bytes.fill(0x5a)
+  const blob = new Blob([bytes], { type: 'application/pdf' })
+  const script = await toBase64Script('./assets/refs/ref-big.pdf', blob)
+
+  const entries = extractInlinePdfEntries(script)
+  assert.strictEqual(entries.length, 1)
+  const entry = entries[0]
+  assert.ok(entry !== undefined)
+  assert.strictEqual(entry.key, './assets/refs/ref-big.pdf')
+  assert.strictEqual(entry.base64.length, Math.ceil(bytes.length / 3) * 4)
+  assert.deepStrictEqual(base64ToBytes(entry.base64), bytes)
+})
+
 void test('rewriteDocumentPaths rewrites main canvas and subCanvases back to inbox paths', () => {
   const document: PaperDocument = {
     meta: createFixtureDocument().meta,

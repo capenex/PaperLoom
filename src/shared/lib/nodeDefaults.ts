@@ -4,6 +4,10 @@ import type { DocumentDefaults, NodeLayout } from '@/shared/types/paper'
 export const DEFAULT_NODE_WIDTH = 208
 export const DEFAULT_NODE_HEIGHT = 112
 
+/** 幻灯片伪图片（.slide.svg）节点的默认 16:9 尺寸 */
+export const DEFAULT_SLIDE_NODE_WIDTH = 560
+export const DEFAULT_SLIDE_NODE_HEIGHT = 315
+
 /** 多媒体（图片）节点点击放大时的缩放倍数（1.5x） */
 export const EXPANDED_MEDIA_SCALE = 1.5
 
@@ -16,7 +20,7 @@ export const FONT_SIZE_OPTIONS: readonly number[] = [12, 14, 16, 20, 24, 32]
 /** 编辑栏允许的节点尺寸范围 */
 export const MIN_NODE_WIDTH = 120
 export const MAX_NODE_WIDTH = 1000
-export const MIN_NODE_HEIGHT = 64
+export const MIN_NODE_HEIGHT = 40
 export const MAX_NODE_HEIGHT = 800
 
 export interface NodeSize {

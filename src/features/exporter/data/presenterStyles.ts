@@ -237,13 +237,14 @@ body {
 
 .detail {
   position: relative;
+  z-index: 20;
   display: none;
   width: 40%;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  padding: 12px 12px 12px 8px;
-  border-left: 0;
+  padding: 12px 8px 12px 12px;
+  border-right: 0;
   background: rgba(251, 252, 254, 0.88);
   backdrop-filter: blur(4px);
 }
@@ -284,7 +285,7 @@ body {
 
 .detail-collapse {
   position: absolute;
-  left: 8px;
+  right: 8px;
   top: 50%;
   /* 必须盖在分界线热区之上，否则按钮中心会被拖动条吃掉点击 */
   z-index: 12;
@@ -293,7 +294,7 @@ body {
   height: 32px;
   align-items: center;
   justify-content: center;
-  transform: translate(-50%, -50%);
+  transform: translate(50%, -50%);
   border: 1px solid #e2e8f0;
   border-radius: 9999px;
   background: #ffffff;

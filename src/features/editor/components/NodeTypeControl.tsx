@@ -72,7 +72,7 @@ function NodeKindButtons({ kind, disabled, onChangeKind }: Readonly<NodeKindButt
       aria-label="节点类型"
       disabled={disabled}
       className={cn(
-        'm-0 inline-flex h-8 items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-100/90 p-0.5 shadow-inner',
+        'm-0 inline-flex h-8 w-fit items-center gap-0.5 self-start rounded-lg border border-slate-200/80 bg-slate-100/90 p-0.5 shadow-inner',
         disabled && 'opacity-45',
       )}
     >
@@ -202,7 +202,7 @@ export function NodeTypeControl({
   const disabled = content === undefined
 
   return (
-    <div className="flex h-[70px] flex-col justify-between gap-1.5">
+    <div className="flex h-[70px] flex-col items-start justify-between gap-1.5">
       <NodeKindButtons
         kind={content?.kind}
         disabled={disabled}

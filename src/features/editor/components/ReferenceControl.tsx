@@ -1,28 +1,47 @@
-import { useRef, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import { useState } from 'react'
 import { Paperclip } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
-import { uploadBlobToInbox } from '@/shared/lib/inbox'
-import { referenceKindFromFileName, referenceKindFromMime } from '@/shared/lib/reference'
+import { buildInboxUrl } from '@/shared/lib/inbox'
+import type { InboxEntry } from '@/shared/lib/inbox'
+import { referenceKindFromFileName } from '@/shared/lib/reference'
 import type { PaperReference } from '@/shared/types/paper'
+import { FilePoolReferencePickerModal } from './FilePoolReferencePickerModal'
 import { PdfCropDialog } from './PdfCropDialog'
 
 interface ReferenceControlProps {
   readonly onReference: (reference: PaperReference) => void
 }
 
-interface ReferencePickerButtonProps {
-  readonly onPickFile: (file: File) => void
-}
+/** 插入本地引用：从文件池中选择 PDF / 图片 / 幻灯片 / HTML 页面；PDF 先切图再插入 */
+export function ReferenceControl({ onReference }: Readonly<ReferenceControlProps>) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [cropFile, setCropFile] = useState<File | null>(null)
 
-function ReferencePickerButton({ onPickFile }: Readonly<ReferencePickerButtonProps>) {
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  function handleChange(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.target.files?.[0] ?? null
-    event.target.value = ''
-    if (file !== null) onPickFile(file)
+  function handleSelectInboxEntry(entry: InboxEntry): void {
+    setPickerOpen(false)
+    const src = buildInboxUrl(entry.path)
+    if (entry.category === 'image' || entry.category === 'slide') {
+      onReference({ kind: 'image', src, label: entry.name })
+      return
+    }
+    const kind = referenceKindFromFileName(entry.name)
+    if (kind === 'page') {
+      onReference({ kind: 'page', src, label: entry.name })
+      return
+    }
+    if (kind === 'pdf' || entry.ext.toLowerCase() === '.pdf') {
+      void fetch(src, { cache: 'no-store' })
+        .then(async (res) => {
+          if (!res.ok) throw new Error('读取文件池中的 PDF 失败')
+          const blob = await res.blob()
+          const pdfFile = new File([blob], entry.name, { type: 'application/pdf' })
+          setCropFile(pdfFile)
+        })
+        .catch((error: unknown) => {
+          window.alert(error instanceof Error ? error.message : '读取 PDF 失败')
+        })
+    }
   }
 
   return (
@@ -32,52 +51,24 @@ function ReferencePickerButton({ onPickFile }: Readonly<ReferencePickerButtonPro
         variant="ghost"
         size="icon-xs"
         aria-label="插入本地引用"
-        title="插入本地引用（PDF / 图片 / HTML 页面）"
+        title="从文件池插入本地引用（PDF / 图片 / 幻灯片 / HTML 页面）"
         onMouseDown={(event) => {
           event.preventDefault()
         }}
         onClick={() => {
-          inputRef.current?.click()
+          setPickerOpen(true)
         }}
       >
         <Paperclip aria-hidden="true" />
       </Button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.html,.htm,image/*"
-        tabIndex={-1}
-        aria-hidden="true"
-        className="hidden"
-        onChange={handleChange}
-      />
-    </>
-  )
-}
-
-/** 插入本地引用：选择 PDF / 图片 / HTML 页面；PDF 先切图再插入 */
-export function ReferenceControl({ onReference }: Readonly<ReferenceControlProps>) {
-  const [cropFile, setCropFile] = useState<File | null>(null)
-
-  function handlePickFile(file: File): void {
-    const kind = referenceKindFromMime(file.type) ?? referenceKindFromFileName(file.name)
-    if (kind === null) return
-    if (kind === 'pdf') {
-      setCropFile(file)
-      return
-    }
-    uploadBlobToInbox(file, file.name)
-      .then((src) => {
-        onReference({ kind, src, label: file.name })
-      })
-      .catch((error: unknown) => {
-        window.alert(error instanceof Error ? error.message : '引用资源写入 res/inbox 失败')
-      })
-  }
-
-  return (
-    <>
-      <ReferencePickerButton onPickFile={handlePickFile} />
+      {pickerOpen && (
+        <FilePoolReferencePickerModal
+          onSelectEntry={handleSelectInboxEntry}
+          onClose={() => {
+            setPickerOpen(false)
+          }}
+        />
+      )}
       {cropFile !== null && (
         <PdfCropDialog
           file={cropFile}

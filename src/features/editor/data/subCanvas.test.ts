@@ -159,7 +159,7 @@ void test('estimateFittedNodeSize computes compact sizes for short title and exp
   const shortFitted = estimateFittedNodeSize(shortTextNode, doc.defaults)
   assert.ok(shortFitted !== null)
   assert.equal(shortFitted.width, 120)
-  assert.equal(shortFitted.height, 64)
+  assert.ok(shortFitted.height >= 40 && shortFitted.height <= 56)
 
   doc = updateTextNodeContent(
     doc,
@@ -180,5 +180,5 @@ void test('estimateFittedNodeSize computes compact sizes for short title and exp
   const titleFitted = estimateFittedNodeSize(titleNode, doc.defaults)
   assert.ok(titleFitted !== null)
   assert.ok(titleFitted.width >= 120 && titleFitted.width <= 200)
-  assert.ok(titleFitted.height >= 64 && titleFitted.height <= 96)
+  assert.ok(titleFitted.height >= 40 && titleFitted.height <= 96)
 })

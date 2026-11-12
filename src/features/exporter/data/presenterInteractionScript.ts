@@ -157,7 +157,7 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   })
   detailResize.addEventListener('pointermove', function (event) {
     if (!resizing) return
-    setDetailWidthPercent(((window.innerWidth - event.clientX) / window.innerWidth) * 100)
+    setDetailWidthPercent((event.clientX / window.innerWidth) * 100)
   })
   function stopResize() {
     resizing = false
@@ -165,7 +165,7 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   detailResize.addEventListener('pointerup', stopResize)
   detailResize.addEventListener('pointercancel', stopResize)
   detailResize.addEventListener('keydown', function (event) {
-    var delta = event.key === 'ArrowLeft' ? 2 : (event.key === 'ArrowRight' ? -2 : 0)
+    var delta = event.key === 'ArrowRight' ? 2 : (event.key === 'ArrowLeft' ? -2 : 0)
     if (delta === 0) return
     event.preventDefault()
     event.stopPropagation()

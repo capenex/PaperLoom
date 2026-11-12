@@ -81,7 +81,11 @@ export function cleanBrowserArtifacts(root: HTMLElement, stripSyntaxTokenStyling
       span.style.removeProperty('color')
       span.style.removeProperty('font-size')
     }
-    if (span.style.backgroundColor.trim() === '' && span.style.color.trim() === '') {
+    if (
+      span.style.backgroundColor.trim() === '' &&
+      span.style.color.trim() === '' &&
+      span.style.fontSize.trim() === ''
+    ) {
       unwrapElement(span)
     }
   })

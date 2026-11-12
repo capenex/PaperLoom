@@ -16,6 +16,7 @@ import type {
   TextNodeContent,
 } from '@/shared/types/paper'
 import { splitRichTextPages } from '../lib/markdownRichText'
+import { LEGACY_BROKEN_SAMPLE_IMAGE_SRC, rememberNodeKindContent } from './nodeContent'
 import { applyInCanvas } from './subCanvas'
 
 function replaceNodeContent(
@@ -24,11 +25,18 @@ function replaceNodeContent(
   content: NodeContent,
 ): PaperDocument {
   if (!document.nodes.some((node) => node.id === nodeId)) return document
+  rememberNodeKindContent(document, nodeId, content)
   return {
     ...document,
     meta: { ...document.meta, updatedAt: new Date().toISOString() },
     nodes: document.nodes.map((node) => (node.id === nodeId ? { ...node, content } : node)),
   }
+}
+
+function resolveNonEmptyImageItems(content: ImageNodeContent): readonly ImageSlideItem[] {
+  return resolveImageItems(content).filter(
+    (item) => item.src.trim() !== '' && item.src !== LEGACY_BROKEN_SAMPLE_IMAGE_SRC,
+  )
 }
 
 function addImagePageToSlice(
@@ -38,7 +46,7 @@ function addImagePageToSlice(
 ): PaperDocument {
   const node = slice.nodes.find((item) => item.id === nodeId)
   if (node === undefined || node.content.kind !== 'image' || newItems.length === 0) return slice
-  const items = [...resolveImageItems(node.content), ...newItems]
+  const items = [...resolveNonEmptyImageItems(node.content), ...newItems]
   return replaceNodeContent(slice, nodeId, buildImageContentWithItems(items, items.length - 1))
 }
 
@@ -58,10 +66,12 @@ function replaceActiveImagePageInSlice(
 ): PaperDocument {
   const node = slice.nodes.find((entry) => entry.id === nodeId)
   if (node === undefined || node.content.kind !== 'image') return slice
-  const activeIndex = resolveActiveImageIndex(node.content)
-  const items = resolveImageItems(node.content).map((entry, index) =>
-    index === activeIndex ? item : entry,
-  )
+  const existing = resolveNonEmptyImageItems(node.content)
+  if (existing.length === 0) {
+    return replaceNodeContent(slice, nodeId, buildImageContentWithItems([item], 0))
+  }
+  const activeIndex = Math.min(resolveActiveImageIndex(node.content), existing.length - 1)
+  const items = existing.map((entry, index) => (index === activeIndex ? item : entry))
   return replaceNodeContent(slice, nodeId, buildImageContentWithItems(items, activeIndex))
 }
 
@@ -79,9 +89,12 @@ export function replaceActiveImagePageInNode(
 function removeActiveImagePageFromSlice(slice: PaperDocument, nodeId: NodeId): PaperDocument {
   const node = slice.nodes.find((entry) => entry.id === nodeId)
   if (node === undefined || node.content.kind !== 'image') return slice
-  const items = resolveImageItems(node.content)
-  if (items.length <= 1) return slice
-  const activeIndex = resolveActiveImageIndex(node.content)
+  const items = resolveImageItems(node.content).filter((item) => item.src.trim() !== '')
+  if (items.length === 0) return slice
+  if (items.length === 1) {
+    return replaceNodeContent(slice, nodeId, buildImageContentWithItems([], 0))
+  }
+  const activeIndex = Math.min(resolveActiveImageIndex(node.content), items.length - 1)
   const remaining = items.filter((_, index) => index !== activeIndex)
   return replaceNodeContent(
     slice,

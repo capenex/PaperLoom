@@ -26,6 +26,8 @@ export interface InboxEntry {
   /** 小写扩展名，含点号；伪图片固定识别为 ".slide.svg" */
   readonly ext: string
   readonly category: InboxAssetCategory
+  /** 文件内容的 SHA-256 哈希值（仅 kind === 'file' 时存在），用于跨文件池与文件夹去重 */
+  readonly sha256?: string | undefined
 }
 
 const MIME_TO_EXTENSION: Readonly<Record<string, string>> = {

@@ -1,13 +1,16 @@
 import { useCallback, useState } from 'react'
 
+import { buildInboxUrl } from '@/shared/lib/inbox'
 import type { InboxEntry } from '@/shared/lib/inbox'
 import { rewriteDocumentInboxPaths } from '@/shared/lib/inboxReferences'
 import type { NodeId, PaperDocument, PaperNode } from '@/shared/types/paper'
 import type { SlideDocumentSpec } from '@/shared/types/slide'
 import type { SlideComposerTarget } from '../components/SlideComposerModal'
 import { createInitialDocument } from '../data/document'
-import { computeIdealImageBox } from '../lib/fitNodeSize'
-import { dispatchInboxEntryToCanvas } from '../lib/inboxUpload'
+import type { DetailContent } from '../lib/detailContent'
+import { computeIdealSlideBox } from '../lib/fitNodeSize'
+import { fetchInboxTextContent } from '../lib/inboxClient'
+import { detectStaticFileFormat } from '../lib/staticMarkdown'
 import { useFilePool } from './useFilePool'
 import type { NodeMutations } from './useNodeMutations'
 
@@ -45,7 +48,7 @@ function insertSavedSlideIntoCanvas(
     return
   }
 
-  const box = computeIdealImageBox(spec.width, spec.height)
+  const box = computeIdealSlideBox(spec.width, spec.height)
   nodeMutations.addImage(
     {
       kind: 'image',
@@ -111,24 +114,27 @@ export function useSlideAndFilePoolActions({
     [document, replaceDocument, filePool, targetImageNodeForSlide, selectedNode, activeNodes, nodeMutations],
   )
 
-  const quickInsertInboxEntry = useCallback(
-    (entry: InboxEntry) => {
-      const target = selectedNode === undefined ? undefined : { parentId: selectedNode.id }
-      void dispatchInboxEntryToCanvas(entry, selectedNode, false, target, {
-        nodes: activeNodes,
-        inboxEntries: filePool.entries,
-        currentInboxFolder: filePool.currentFolder,
-        onRefreshInbox: filePool.refresh,
-        onAddImage: nodeMutations.addImage,
-        onAddImagePages: nodeMutations.addImagePages,
-        onReplaceImagePage: nodeMutations.replaceImagePage,
-        onAddFile: nodeMutations.addFile,
-        onUpdateFile: nodeMutations.updateFile,
-        onAddRichText: nodeMutations.addRichText,
-        onUpdateContent: nodeMutations.updateContent,
+  const previewInboxEntry = useCallback(
+    (entry: InboxEntry, openCustomDetail: (content: DetailContent) => void) => {
+      const src = buildInboxUrl(entry.path, entry.updatedAt)
+      if (entry.category === 'image' || entry.category === 'slide') {
+        openCustomDetail({ type: 'image', src, alt: entry.name })
+        return
+      }
+      if (entry.category === 'reference') {
+        if (entry.ext === '.pdf') {
+          openCustomDetail({ type: 'pdf', src, page: 1, label: entry.name })
+        } else {
+          openCustomDetail({ type: 'page', src, label: entry.name })
+        }
+        return
+      }
+      void fetchInboxTextContent(entry.path).then((text) => {
+        const format = detectStaticFileFormat(entry.name)
+        openCustomDetail({ type: 'file', fileName: entry.name, format, text })
       })
     },
-    [selectedNode, activeNodes, filePool, nodeMutations],
+    [],
   )
 
   const resetBlankProject = useCallback(() => {
@@ -142,7 +148,7 @@ export function useSlideAndFilePoolActions({
     openEditSlideComposer,
     closeSlideComposer,
     handleSavedSlide,
-    quickInsertInboxEntry,
+    previewInboxEntry,
     resetBlankProject,
   }
 }

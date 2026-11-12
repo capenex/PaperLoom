@@ -46,6 +46,9 @@ function findNodeDetailContent(
   const node = nodes.find((item) => item.id === nodeId)
   if (node === undefined) return null
   if (node.content.kind === 'image') {
+    if (node.content.src.trim() === '' || node.content.src === '/media/oxcq2cmh.jpg') {
+      return null
+    }
     return { type: 'image', src: node.content.src, alt: node.content.alt }
   }
   if (node.content.kind === 'file') {
@@ -63,12 +66,14 @@ function findNodeDetailContent(
   return null
 }
 
-/** 引用详情优先于节点详情，两者共用右侧面板 */
+/** 自定义预览详情与引用详情优先于节点详情，共用右侧面板 */
 export function findDetailContent(
   nodes: readonly PaperNode[],
   detailMediaNodeId: NodeId | null,
   detailReference: PaperReference | null,
+  detailCustom: DetailContent | null = null,
 ): DetailContent | null {
+  if (detailCustom !== null) return detailCustom
   if (detailReference !== null) return detailFromReference(detailReference)
   return findNodeDetailContent(nodes, detailMediaNodeId)
 }

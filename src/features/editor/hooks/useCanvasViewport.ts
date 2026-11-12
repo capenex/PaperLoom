@@ -55,7 +55,7 @@ export interface CanvasViewportState extends CanvasPanState {
 }
 
 const INITIAL_VIEW: CanvasView = { zoom: 1, x: 0, y: 0 }
-const BOTTOM_EDITOR_FOCUS_OFFSET_Y = -135
+const BOTTOM_EDITOR_FOCUS_OFFSET_Y = -165
 
 function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))

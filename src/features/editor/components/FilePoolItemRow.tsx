@@ -7,7 +7,6 @@ import {
   Folder,
   Image as ImageIcon,
   Pencil,
-  Plus,
   Presentation,
   Trash2,
   X,
@@ -30,7 +29,7 @@ interface FilePoolItemRowProps {
   readonly onMoveToFolder: (sourcePath: string, targetFolder: string) => void
   readonly onDelete: (entry: InboxEntry) => void
   readonly onEditSlide: (relPath: string) => void
-  readonly onQuickInsertToCanvas: (entry: InboxEntry) => void
+  readonly onPreviewEntry: (entry: InboxEntry) => void
 }
 
 function stripKnownExtension(name: string, ext: string): string {
@@ -145,13 +144,11 @@ function InlineRenameForm({
 function EntryActionButtons({
   entry,
   onEditSlide,
-  onQuickInsertToCanvas,
   onStartRename,
   onDelete,
 }: Readonly<{
   entry: InboxEntry
   onEditSlide: (relPath: string) => void
-  onQuickInsertToCanvas: (entry: InboxEntry) => void
   onStartRename: () => void
   onDelete: (entry: InboxEntry) => void
 }>) {
@@ -170,17 +167,6 @@ function EntryActionButtons({
           <Presentation className="size-3.5" aria-hidden="true" />
         </button>
       )}
-      <button
-        type="button"
-        aria-label={`插入 ${entry.name} 到画布`}
-        onClick={(e) => {
-          e.stopPropagation()
-          onQuickInsertToCanvas(entry)
-        }}
-        className="cursor-pointer rounded-md p-1.5 text-slate-500 hover:bg-slate-200/60 hover:text-slate-800"
-      >
-        <Plus className="size-3.5" aria-hidden="true" />
-      </button>
       <button
         type="button"
         aria-label={`重命名 ${entry.name}`}
@@ -250,7 +236,7 @@ export function FilePoolItemRow({
   onMoveToFolder,
   onDelete,
   onEditSlide,
-  onQuickInsertToCanvas,
+  onPreviewEntry,
 }: Readonly<FilePoolItemRowProps>) {
   const [renaming, setRenaming] = useState(false)
   const [folderDragOver, setFolderDragOver] = useState(false)
@@ -287,8 +273,7 @@ export function FilePoolItemRow({
       onDoubleClick={() => {
         if (renaming) return
         if (entry.kind === 'folder') onEnterFolder(entry.path)
-        else if (entry.category === 'slide') onEditSlide(entry.path)
-        else onQuickInsertToCanvas(entry)
+        else onPreviewEntry(entry)
       }}
       className={cn(
         'group flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors select-none',
@@ -316,7 +301,6 @@ export function FilePoolItemRow({
           <EntryActionButtons
             entry={entry}
             onEditSlide={onEditSlide}
-            onQuickInsertToCanvas={onQuickInsertToCanvas}
             onStartRename={() => {
               setRenaming(true)
             }}

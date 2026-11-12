@@ -20,13 +20,11 @@ import {
 } from "@/shared/components/ui/select-menu"
 import { FONT_SIZE_OPTIONS } from "@/shared/lib/nodeDefaults"
 import type { PaperReference } from "@/shared/types/paper"
-import { LinkControl } from "./LinkControl"
 import { ReferenceControl } from "./ReferenceControl"
 
 interface RichTextToolbarProps {
   readonly onCommand: (command: string, value?: string) => void
   readonly onFontSize: (sizePx: number) => void
-  readonly onLink: (url: string) => boolean
   readonly onReference: (reference: PaperReference) => void
 }
 
@@ -178,7 +176,6 @@ function FontSizeSelect({ onFontSize }: Readonly<FontSizeSelectProps>) {
 export function RichTextToolbar({
   onCommand,
   onFontSize,
-  onLink,
   onReference,
 }: Readonly<RichTextToolbarProps>) {
   return (
@@ -198,7 +195,6 @@ export function RichTextToolbar({
       <ToolbarDivider />
       <ColorControls onCommand={onCommand} />
       <ToolbarDivider />
-      <LinkControl onLink={onLink} />
       <ReferenceControl onReference={onReference} />
 
       <FormatButton

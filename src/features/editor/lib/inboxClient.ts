@@ -41,6 +41,7 @@ function parseInboxEntry(raw: unknown): InboxEntry | null {
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0,
     ext: typeof raw.ext === 'string' ? raw.ext : '',
     category,
+    ...(typeof raw.sha256 === 'string' ? { sha256: raw.sha256 } : {}),
   }
 }
 

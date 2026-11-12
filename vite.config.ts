@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   copyFileSync,
   mkdirSync,
@@ -18,6 +19,10 @@ import type { Plugin } from 'vite'
 
 const INBOX_DIR = fileURLToPath(new URL('./res/inbox', import.meta.url))
 const FORBIDDEN_CHARS = /[<>:"\\|?*]/u
+
+function computeBufferSha256(buf: Buffer): string {
+  return createHash('sha256').update(buf).digest('hex')
+}
 
 function isSafeRelPath(relPath: string): boolean {
   if (relPath === '' || relPath.startsWith('/') || relPath.endsWith('/')) return false
@@ -83,30 +88,9 @@ function readJsonBody(
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif', '.bmp'])
 const REF_EXTS = new Set(['.pdf', '.html', '.htm'])
 const DOC_EXTS = new Set([
-  '.md',
-  '.markdown',
-  '.mdx',
-  '.txt',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.toml',
-  '.py',
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.go',
-  '.rs',
-  '.java',
-  '.c',
-  '.cpp',
-  '.h',
-  '.sh',
-  '.css',
-  '.sql',
-  '.xml',
-  '.csv',
+  '.md', '.markdown', '.mdx', '.txt', '.json', '.yaml', '.yml', '.toml',
+  '.py', '.ts', '.tsx', '.js', '.jsx', '.go', '.rs', '.java', '.c', '.cpp',
+  '.h', '.sh', '.css', '.sql', '.xml', '.csv',
 ])
 
 function detectExtAndCategory(fileName: string): {
@@ -131,6 +115,7 @@ interface ServerInboxEntry {
   readonly updatedAt: number
   readonly ext: string
   readonly category: 'slide' | 'image' | 'document' | 'reference' | 'other'
+  readonly sha256?: string | undefined
 }
 
 function scanInboxDirectory(dirAbs: string, relPrefix: string, out: ServerInboxEntry[]): void {
@@ -157,6 +142,7 @@ function scanInboxDirectory(dirAbs: string, relPrefix: string, out: ServerInboxE
       scanInboxDirectory(fullPath, relPath, out)
     } else if (dirent.isFile()) {
       const { ext, category } = detectExtAndCategory(dirent.name)
+      const sha256 = computeBufferSha256(readFileSync(fullPath))
       out.push({
         path: relPath,
         name: dirent.name,
@@ -166,6 +152,7 @@ function scanInboxDirectory(dirAbs: string, relPrefix: string, out: ServerInboxE
         updatedAt: Math.round(stat.mtimeMs),
         ext,
         category,
+        sha256,
       })
     }
   }
@@ -174,12 +161,25 @@ function scanInboxDirectory(dirAbs: string, relPrefix: string, out: ServerInboxE
 function handleInboxTree(req: IncomingMessage, res: ServerResponse, rawUrl: string): boolean {
   if (req.method !== 'GET' || !rawUrl.startsWith('/api/res/inbox/tree')) return false
   mkdirSync(INBOX_DIR, { recursive: true })
-  const entries: ServerInboxEntry[] = []
-  scanInboxDirectory(INBOX_DIR, '', entries)
-  entries.sort((a, b) => {
+  const rawEntries: ServerInboxEntry[] = []
+  scanInboxDirectory(INBOX_DIR, '', rawEntries)
+  rawEntries.sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1
     return a.name.localeCompare(b.name, 'zh-CN', { numeric: true })
   })
+  const seenHashes = new Set<string>()
+  const entries: ServerInboxEntry[] = []
+  for (const entry of rawEntries) {
+    if (entry.kind === 'file' && entry.sha256 !== undefined) {
+      if (seenHashes.has(entry.sha256)) {
+        const dupAbs = resolveInboxTarget(entry.path)
+        if (dupAbs !== null) rmSync(dupAbs, { force: true })
+        continue
+      }
+      seenHashes.add(entry.sha256)
+    }
+    entries.push(entry)
+  }
   respondJson(res, 200, { entries })
   return true
 }
@@ -240,12 +240,32 @@ function handleInboxUpload(req: IncomingMessage, res: ServerResponse, rawUrl: st
     chunks.push(chunk)
   })
   req.on('end', () => {
+    const buf = Buffer.concat(chunks)
+    const sha256 = computeBufferSha256(buf)
+    if (!overwrite) {
+      mkdirSync(INBOX_DIR, { recursive: true })
+      const existing: ServerInboxEntry[] = []
+      scanInboxDirectory(INBOX_DIR, '', existing)
+      const matched = existing.find((item) => item.kind === 'file' && item.sha256 === sha256)
+      if (matched !== undefined) {
+        respondJson(res, 200, {
+          src: encodeInboxUrl(matched.path),
+          path: `res/inbox/${matched.path}`,
+          relPath: matched.path,
+          sha256,
+          deduplicated: true,
+        })
+        return
+      }
+    }
     mkdirSync(dirname(targetAbs), { recursive: true })
-    writeFileSync(targetAbs, Buffer.concat(chunks))
+    writeFileSync(targetAbs, buf)
     respondJson(res, 200, {
       src: encodeInboxUrl(finalRelPath),
       path: `res/inbox/${finalRelPath}`,
       relPath: finalRelPath,
+      sha256,
+      deduplicated: false,
     })
   })
   return true

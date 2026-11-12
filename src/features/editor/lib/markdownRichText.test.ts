@@ -18,6 +18,8 @@ import {
 } from './markdownRichText'
 import { collectMarkdownSyntaxSpans } from './markdownSyntaxSpans'
 import {
+  applyFontSize,
+  applyReference,
   clearEditorFormatting,
   guardSelectionAgainstMarkdownSyntax,
 } from './richText'
@@ -248,13 +250,42 @@ void test('literal block token at line start is escaped on decompile and stays a
   assert.equal(compileMarkdownRichTextHtml(source), stored)
 })
 
-void test('math tex with backslashes round-trips through source escaping', () => {
+void test('math tex keeps a single backslash in source and round-trips', () => {
   const editorHtml = '<div>$\\frac{a}{b}$</div>'
   const compiled = compileMarkdownRichTextHtml(editorHtml)
   assert.ok(compiled.includes('data-pl-math="\\frac{a}{b}"'))
   const source = decompileRichTextToEditableHtml(compiled)
-  assert.equal(source, '<div>$\\\\frac{a}{b}$</div>')
+  assert.equal(source, '<div>$\\frac{a}{b}$</div>')
   assert.equal(compileMarkdownRichTextHtml(source), compiled)
+})
+
+void test('reopened backslash formula stays single-backslash and can carry a reference', () => {
+  const editorHtml = '<div>相 $\\gamma-Ga_2O_3$ 的</div>'
+  const compiled = compileMarkdownRichTextHtml(editorHtml)
+  const source = decompileRichTextToEditableHtml(compiled)
+  assert.equal(source, editorHtml)
+
+  const editor = document.createElement('div')
+  editor.innerHTML = source
+  document.body.appendChild(editor)
+  const line = editor.firstElementChild
+  assert.ok(line instanceof HTMLElement)
+  const textNode = line.firstChild
+  assert.ok(textNode instanceof Text)
+  const selection = window.getSelection()
+  assert.ok(selection !== null)
+  const range = document.createRange()
+  range.setStart(textNode, 0)
+  range.setEnd(textNode, textNode.data.length)
+  selection.removeAllRanges()
+  selection.addRange(range)
+
+  assert.equal(guardSelectionAgainstMarkdownSyntax(editor), true)
+  applyReference(editor, { kind: 'pdf', src: '/res/inbox/p.pdf', label: 'p.pdf' })
+  const withRef = compileMarkdownRichTextHtml(editor.innerHTML)
+  assert.ok(withRef.includes('data-pl-ref="pdf"'))
+  assert.ok(withRef.includes('data-pl-math="\\gamma-Ga_2O_3"'))
+  editor.remove()
 })
 
 void test('collectMarkdownSyntaxSpans marks escape backslash but not the escaped char', () => {
@@ -381,5 +412,49 @@ void test('multi-page estimateFittedNodeSize uses max width and max height acros
   assert.ok(sizePage1Only !== null && sizePage2Only !== null && sizeMulti !== null)
   assert.equal(sizeMulti.width, Math.max(sizePage1Only.width, sizePage2Only.width))
   assert.ok(sizeMulti.height > sizePage2Only.height)
+})
+
+void test('applyReference and applyFontSize succeed on selections containing inline math formulas ($...$)', () => {
+  const editor = document.createElement('div')
+  editor.innerHTML = '<div>能量公式 $E = mc^2$ 的推导</div>'
+  document.body.appendChild(editor)
+
+  const line = editor.firstElementChild
+  assert.ok(line instanceof HTMLElement)
+  const textNode = line.firstChild
+  assert.ok(textNode instanceof Text)
+  const selection = window.getSelection()
+  assert.ok(selection !== null)
+
+  // Select "能量公式 $E = mc^2$" and apply a local PDF reference
+  const range = document.createRange()
+  range.setStart(textNode, 0)
+  range.setEnd(textNode, 15)
+  selection.removeAllRanges()
+  selection.addRange(range)
+
+  applyReference(editor, {
+    kind: 'pdf',
+    src: '/res/inbox/paper.pdf',
+    label: 'paper.pdf',
+    page: 3,
+  })
+  const compiledWithRef = compileMarkdownRichTextHtml(editor.innerHTML)
+  assert.ok(compiledWithRef.includes('data-pl-ref="pdf"'))
+  assert.ok(compiledWithRef.includes('class="pl-math"'))
+  assert.ok(compiledWithRef.includes('data-pl-math="E = mc^2"'))
+
+  // Select the reference and apply 24px font size so the math formula scales with text
+  const fullLineRange = document.createRange()
+  fullLineRange.selectNodeContents(line)
+  selection.removeAllRanges()
+  selection.addRange(fullLineRange)
+
+  applyFontSize(editor, 24)
+  const compiledWithSize = compileMarkdownRichTextHtml(editor.innerHTML)
+  assert.ok(compiledWithSize.includes('style="font-size: 24px"'))
+  assert.ok(compiledWithSize.includes('class="pl-math"'))
+
+  editor.remove()
 })
 

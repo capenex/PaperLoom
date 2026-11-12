@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import type { InboxEntry } from '@/shared/lib/inbox'
 import type { NodeSize } from '@/shared/lib/nodeDefaults'
 import { findTriggeredEvent } from '@/shared/lib/nodeEvents'
@@ -18,6 +20,7 @@ import type { AddImageNodeTarget } from '../data/document'
 import type { Point } from '../data/layout'
 import { useReferencePreview } from '../hooks/useReferencePreview'
 import { findDetailContent } from '../lib/detailContent'
+import type { DetailContent } from '../lib/detailContent'
 import type { PendingNodeAction } from '../lib/pendingNodeAction'
 import { DetailPanel } from './DetailPanel'
 import { EditorCanvas } from './EditorCanvas'
@@ -25,6 +28,7 @@ import { ReferencePreviewPopup } from './ReferencePreviewPopup'
 
 interface EditorProps {
   readonly document: PaperDocument
+  readonly filePoolSlot?: ReactNode
   readonly activeCanvasId?: CanvasId | null | undefined
   readonly activeHostNodeId?: NodeId | null | undefined
   readonly breadcrumbs?: readonly BreadcrumbItem[] | undefined
@@ -33,6 +37,7 @@ interface EditorProps {
   readonly expandedMediaNodeId: NodeId | null
   readonly detailMediaNodeId: NodeId | null
   readonly detailReference: PaperReference | null
+  readonly detailCustom?: DetailContent | null | undefined
   readonly inboxEntries?: readonly InboxEntry[] | undefined
   readonly currentInboxFolder?: string | undefined
   readonly onRefreshInbox?: (() => Promise<void>) | undefined
@@ -102,11 +107,16 @@ function dispatchPopupEvent(
   }
 }
 
-/** 编辑器：画布 + 引用预览弹窗 + 详情视图（图片自适应圆角弹窗 / PDF与文件右侧详情栏） */
+/** 编辑器：左栏详情视图 + 画布 + 引用预览弹窗 */
 export function Editor(props: Readonly<EditorProps>) {
   const { document } = props
   const preview = useReferencePreview(props.onOpenReferenceDetail)
-  const detail = findDetailContent(document.nodes, props.detailMediaNodeId, props.detailReference)
+  const detail = findDetailContent(
+    document.nodes,
+    props.detailMediaNodeId,
+    props.detailReference,
+    props.detailCustom ?? null,
+  )
   const canPopWithEsc =
     props.editingNodeId === null && detail === null && preview.preview === null
   const firePopup = (trigger: 'click' | 'double-click'): void => {
@@ -124,30 +134,33 @@ export function Editor(props: Readonly<EditorProps>) {
 
   return (
     <div className="flex h-full w-full">
-      <EditorCanvas
-        {...props}
-        canPopSubCanvasWithEscape={canPopWithEsc}
-        onSelectNode={(nodeId) => {
-          preview.closePreview()
-          props.onSelectNode(nodeId)
-        }}
-        onTriggerEvent={(nodeId, action) => {
-          preview.closePreview()
-          props.onTriggerEvent(nodeId, action)
-        }}
-        onOpenReferencePreview={preview.openPreview}
-        onOpenReferenceDetail={preview.openDetail}
-        onBackgroundClick={() => {
-          preview.closePreview()
-          props.onSelectNode(null)
-        }}
-        onBackgroundContextMenu={() => {
-          preview.closePreview()
-          props.onCollapseExpandedMedia()
-          props.onCollapseDetail()
-        }}
-      />
       {detail !== null && <DetailPanel detail={detail} onCollapse={props.onCollapseDetail} />}
+      <div className="relative flex min-w-0 flex-1">
+        {props.filePoolSlot}
+        <EditorCanvas
+          {...props}
+          canPopSubCanvasWithEscape={canPopWithEsc}
+          onSelectNode={(nodeId) => {
+            preview.closePreview()
+            props.onSelectNode(nodeId)
+          }}
+          onTriggerEvent={(nodeId, action) => {
+            preview.closePreview()
+            props.onTriggerEvent(nodeId, action)
+          }}
+          onOpenReferencePreview={preview.openPreview}
+          onOpenReferenceDetail={preview.openDetail}
+          onBackgroundClick={() => {
+            preview.closePreview()
+            props.onSelectNode(null)
+          }}
+          onBackgroundContextMenu={() => {
+            preview.closePreview()
+            props.onCollapseExpandedMedia()
+            props.onCollapseDetail()
+          }}
+        />
+      </div>
       {preview.preview !== null && (
         <ReferencePreviewPopup
           preview={preview.preview}

@@ -213,7 +213,6 @@ function FloatingFormatToolbar({ commands, onDone }: Readonly<FloatingFormatTool
         <RichTextToolbar
           onCommand={commands.runCommand}
           onFontSize={commands.changeFontSize}
-          onLink={commands.createLink}
           onReference={commands.createReference}
         />
       </div>
