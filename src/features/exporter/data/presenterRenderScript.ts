@@ -18,6 +18,7 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   stage.className = 'stage'
 
   var svgNS = 'http://www.w3.org/2000/svg'
+  var PRIMARY_COLOR = 'oklch(0.48 0.16 285)'
   var pathsById = {}
   var bridgesById = {}
   var cardsById = {}
@@ -42,7 +43,8 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     return Math.max(0, Math.min(items.length - 1, index))
   }
 
-  function appendNodePager(card, onStep) {    var pager = document.createElement('div')
+  function appendNodePager(card, onStep) {
+    var pager = document.createElement('div')
     pager.className = 'node-pager'
     pager.setAttribute('role', 'group')
     pager.setAttribute('aria-label', '节点翻页')
@@ -81,77 +83,13 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
     return node.isHidden === true
   }
 
-  function placeBridge(line, node, center) {
-    if (!center) return
+  function placeBridge(line, node, centerPoint) {
+    if (!centerPoint) return
     var halfWidth = sizeOf(node).width / 2
-    line.setAttribute('x1', String(center.x - halfWidth))
-    line.setAttribute('x2', String(center.x + halfWidth))
-    line.setAttribute('y1', String(center.y))
-    line.setAttribute('y2', String(center.y))
-  }
-
-  function appendNodeBadge(card, hasSubCanvas, isHostRoot) {
-    if (!hasSubCanvas && !isHostRoot) return
-    var badge = document.createElement('span')
-    badge.className = isHostRoot ? 'node-badge is-host' : 'node-badge'
-    badge.textContent = isHostRoot ? '支线起点' : '支线'
-    card.appendChild(badge)
-    if (isHostRoot && !hasSubCanvas) {
-      card.title = '双击返回上级画布'
-    }
-  }
-
-  function renderBreadcrumbs(onNavigate, onPop) {
-    breadcrumbsBar.textContent = ''
-    if (canvasStack.length === 0) {
-      breadcrumbsBar.classList.remove('is-visible')
-      return
-    }
-    breadcrumbsBar.classList.add('is-visible')
-
-    var backBtn = document.createElement('button')
-    backBtn.type = 'button'
-    backBtn.className = 'breadcrumb-back'
-    backBtn.textContent = '← 返回上级'
-    backBtn.title = '返回上一级画布（快捷键 Esc）'
-    backBtn.addEventListener('click', function (event) {
-      event.stopPropagation()
-      onPop()
-    })
-    breadcrumbsBar.appendChild(backBtn)
-
-    var sep = document.createElement('span')
-    sep.className = 'breadcrumb-divider'
-    breadcrumbsBar.appendChild(sep)
-
-    var items = [{ canvasId: null, label: '主画布' }]
-    canvasStack.forEach(function (cid) {
-      var sub = subCanvases[cid]
-      var hostNode = sub ? findNodeAcrossDocument(sub.hostNodeId) : null
-      items.push({ canvasId: cid, label: '支线：' + summarizeNodeTitle(hostNode) })
-    })
-
-    items.forEach(function (item, idx) {
-      if (idx > 0) {
-        var arrow = document.createElement('span')
-        arrow.className = 'breadcrumb-sep'
-        arrow.textContent = '›'
-        breadcrumbsBar.appendChild(arrow)
-      }
-      var isLast = idx === items.length - 1
-      var btn = document.createElement('button')
-      btn.type = 'button'
-      btn.className = isLast ? 'breadcrumb-item is-current' : 'breadcrumb-item'
-      btn.textContent = item.label
-      btn.disabled = isLast
-      if (!isLast) {
-        btn.addEventListener('click', function (event) {
-          event.stopPropagation()
-          onNavigate(item.canvasId)
-        })
-      }
-      breadcrumbsBar.appendChild(btn)
-    })
+    line.setAttribute('x1', String(centerPoint.x - halfWidth))
+    line.setAttribute('x2', String(centerPoint.x + halfWidth))
+    line.setAttribute('y1', String(centerPoint.y))
+    line.setAttribute('y2', String(centerPoint.y))
   }
 
   function renderStage() {
@@ -190,25 +128,57 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
           (isHiddenNode(parentNode) && (!hasVisibleParent[parentId] || !hasVisibleChild[parentId])) ||
           (isHiddenNode(node) && (!hasVisibleParent[node.id] || !hasVisibleChild[node.id]))
         if (faded) return
+        var sourceWidth = sizeOf(parentNode).width
+        var targetWidth = sizeOf(node).width
+        var group = document.createElementNS(svgNS, 'g')
         var path = document.createElementNS(svgNS, 'path')
-        path.setAttribute(
-          'd',
-          connectionPathD(source, target, sizeOf(parentNode).width, sizeOf(node).width),
-        )
+        path.setAttribute('d', connectionPathD(source, target, sourceWidth, targetWidth))
         path.setAttribute('fill', 'none')
-        path.setAttribute('stroke', '#7c5cbf')
+        path.setAttribute('stroke', PRIMARY_COLOR)
         path.setAttribute('stroke-width', '2')
-        path.setAttribute('opacity', '0.45')
-        pathsById[node.id + ':' + parentId] = { path: path, nodeId: node.id, parentId: parentId }
-        svg.appendChild(path)
+        path.setAttribute('stroke-linecap', 'round')
+        path.setAttribute('opacity', '0.42')
+        group.appendChild(path)
+
+        var startDot = null
+        if (!isHiddenNode(parentNode)) {
+          startDot = document.createElementNS(svgNS, 'circle')
+          startDot.setAttribute('cx', String(source.x + sourceWidth / 2))
+          startDot.setAttribute('cy', String(source.y))
+          startDot.setAttribute('r', '3')
+          startDot.setAttribute('fill', PRIMARY_COLOR)
+          startDot.setAttribute('opacity', '0.55')
+          group.appendChild(startDot)
+        }
+
+        var endDot = null
+        if (!isHiddenNode(node)) {
+          endDot = document.createElementNS(svgNS, 'circle')
+          endDot.setAttribute('cx', String(target.x - targetWidth / 2))
+          endDot.setAttribute('cy', String(target.y))
+          endDot.setAttribute('r', '3')
+          endDot.setAttribute('fill', PRIMARY_COLOR)
+          endDot.setAttribute('opacity', '0.75')
+          group.appendChild(endDot)
+        }
+
+        pathsById[node.id + ':' + parentId] = {
+          path: path,
+          startDot: startDot,
+          endDot: endDot,
+          nodeId: node.id,
+          parentId: parentId,
+        }
+        svg.appendChild(group)
       })
     })
     nodes.forEach(function (node) {
       if (!isHiddenNode(node) || !hasVisibleParent[node.id] || !hasVisibleChild[node.id]) return
       var line = document.createElementNS(svgNS, 'line')
-      line.setAttribute('stroke', '#7c5cbf')
+      line.setAttribute('stroke', PRIMARY_COLOR)
       line.setAttribute('stroke-width', '2')
-      line.setAttribute('opacity', '0.45')
+      line.setAttribute('stroke-linecap', 'round')
+      line.setAttribute('opacity', '0.42')
       bridgesById[node.id] = line
       placeBridge(line, node, positions[node.id])
       svg.appendChild(line)
@@ -222,7 +192,7 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
       var position = positions[node.id]
       if (!position || isHiddenNode(node)) return
       var size = sizeOf(node)
-      var card = document.createElement('article')
+      var card = document.createElement('div')
       card.className = 'node'
       card.style.left = position.x + 'px'
       card.style.top = position.y + 'px'
@@ -239,22 +209,33 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
       appendNodeBadge(card, hasSubCanvas, isHostRoot)
 
       var content = node.content || {}
-      var branchHint = hasSubCanvas ? '，双击展开支线画布' : ''
+      var branchHint = hasSubCanvas ? '，双击展开支线画布' : (isHostRoot ? '，双击返回上级画布' : '')
 
       if (content.kind === 'image' && typeof content.src === 'string') {
         card.classList.add('node-media-card')
-        var media = document.createElement('div')
-        media.className = 'node-media'
-        var image = document.createElement('img')
         var imgItems = imageItemsOf(content)
         var imgCount = imgItems.length
         var imgIndex = typeof nodePageById[node.id] === 'number'
           ? nodePageById[node.id]
           : imageActiveIndexOf(content, imgItems)
+        var media = document.createElement('div')
+        media.className = imgCount > 1 ? 'node-media is-multi' : 'node-media'
+        var image = document.createElement('img')
         image.alt = typeof content.alt === 'string' ? content.alt : ''
         image.draggable = false
+        var mediaEmpty = document.createElement('div')
+        mediaEmpty.className = 'node-media-empty'
+        mediaEmpty.style.display = 'none'
         media.appendChild(image)
+        media.appendChild(mediaEmpty)
         card.appendChild(media)
+
+        image.addEventListener('error', function () {
+          image.style.display = 'none'
+          mediaEmpty.textContent = '图片不可用'
+          mediaEmpty.style.display = 'flex'
+        })
+
         var imgLabel = null
         var imgPrev = null
         var imgNext = null
@@ -262,11 +243,27 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
           var clamped = Math.max(0, Math.min(imgCount - 1, nextIdx))
           imgIndex = clamped
           nodePageById[node.id] = clamped
-          image.src = imgItems[clamped].src
+          var currentSrc = (imgItems[clamped] && imgItems[clamped].src) || ''
+          if (currentSrc.trim() === '') {
+            image.style.display = 'none'
+            mediaEmpty.textContent = '未选择图片'
+            mediaEmpty.style.display = 'flex'
+          } else {
+            image.style.display = 'block'
+            mediaEmpty.style.display = 'none'
+            image.src = currentSrc
+          }
           if (imgLabel) imgLabel.textContent = (clamped + 1) + '/' + imgCount
           if (imgPrev) imgPrev.disabled = clamped <= 0
           if (imgNext) imgNext.disabled = clamped >= imgCount - 1
-          if (detailImageNodeId === node.id) detailImage.src = imgItems[clamped].src
+          if (detailImageNodeId === node.id) {
+            if (currentSrc.trim() === '') {
+              detail.setAttribute('data-image-empty', 'true')
+            } else {
+              detail.removeAttribute('data-image-empty')
+              detailImage.src = currentSrc
+            }
+          }
         }
         if (imgCount > 1) {
           var imgPager = appendNodePager(card, function (delta) {
@@ -282,20 +279,28 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
           }
         }
         applyImagePage(imgIndex)
-        var imageLabel = image.alt === '' ? '未命名图片' : image.alt
-        card.setAttribute('aria-label', '图片节点：' + imageLabel + '，双击在左侧展开大图' + branchHint)
-        card.title = hasSubCanvas ? '双击展开支线画布；双击弹出左栏大图' : '双击弹出左栏大图'
+        var imageLabel = image.alt.trim() === '' ? '未命名图片' : image.alt
+        card.setAttribute('aria-label', '图片节点：' + imageLabel + branchHint)
+        card.title = hasSubCanvas ? '双击展开支线画布' : '双击在左侧展开大图'
       } else if (content.kind === 'title') {
         var titleBox = document.createElement('div')
         titleBox.className = 'node-title-box'
         var mainTitle = typeof content.title === 'string' ? content.title.trim() : ''
         var subTitle = typeof content.subtitle === 'string' ? content.subtitle.trim() : ''
         if (mainTitle === '' && subTitle === '') {
+          var emptyTitleWrap = document.createElement('div')
+          emptyTitleWrap.className = 'node-empty-wrap'
           var emptyTitle = document.createElement('span')
           emptyTitle.className = 'node-empty'
+          emptyTitle.style.color = '#94a3b8'
           emptyTitle.textContent = '空白标题'
-          card.appendChild(emptyTitle)
+          emptyTitleWrap.appendChild(emptyTitle)
+          card.appendChild(emptyTitleWrap)
         } else {
+          var accent = document.createElement('span')
+          accent.className = 'node-title-accent'
+          accent.setAttribute('aria-hidden', 'true')
+          titleBox.appendChild(accent)
           if (mainTitle !== '') {
             var tEl = document.createElement('div')
             tEl.className = 'node-title-main'
@@ -316,6 +321,8 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         if (hasSubCanvas) card.title = '双击展开支线画布'
       } else if (content.kind === 'file') {
         card.classList.add('node-file-card')
+        var fWrap = document.createElement('div')
+        fWrap.className = 'node-file-wrap'
         var fHead = document.createElement('div')
         fHead.className = 'node-file-head'
         var fName = document.createElement('span')
@@ -323,15 +330,25 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
         fName.textContent = content.fileName || '未命名文件'
         var fBadge = document.createElement('span')
         fBadge.className = 'node-file-badge'
-        fBadge.textContent = content.format === 'markdown' ? 'MD' : 'CODE'
+        fBadge.textContent = content.format === 'markdown' ? '· MD' : '· CODE'
         fHead.appendChild(fName)
         fHead.appendChild(fBadge)
-        var fPre = document.createElement('pre')
-        fPre.className = 'node-file-pre'
-        fPre.style.fontSize = Math.max(11, Math.round(defaultFontSize * 0.78)) + 'px'
-        fPre.textContent = typeof content.text === 'string' ? content.text : ''
-        card.appendChild(fHead)
-        card.appendChild(fPre)
+        fWrap.appendChild(fHead)
+        var rawFileText = typeof content.text === 'string' ? content.text : ''
+        if (content.format === 'markdown') {
+          var fMd = document.createElement('div')
+          fMd.className = 'node-file-md node-rich-text'
+          fMd.style.fontSize = Math.max(12, Math.round(defaultFontSize * 0.85)) + 'px'
+          fMd.innerHTML = renderStaticMarkdownHtml(rawFileText)
+          fWrap.appendChild(fMd)
+        } else {
+          var fPre = document.createElement('pre')
+          fPre.className = 'node-file-pre'
+          fPre.style.fontSize = Math.max(11, Math.round(defaultFontSize * 0.78)) + 'px'
+          fPre.textContent = rawFileText
+          fWrap.appendChild(fPre)
+        }
+        card.appendChild(fWrap)
         card.setAttribute('aria-label', '静态文件节点：' + (content.fileName || '未命名文件') + (branchHint || '，双击在左侧展开查看全文'))
         card.title = hasSubCanvas ? '双击展开支线画布' : '双击在左侧展开查看全文'
       } else {
@@ -342,7 +359,12 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
           var rich = document.createElement('div')
           rich.className = pages.length > 1 ? 'node-rich-text has-pager' : 'node-rich-text'
           rich.style.fontSize = defaultFontSize + 'px'
+          var emptyPage = document.createElement('div')
+          emptyPage.className = pages.length > 1 ? 'node-empty-page has-pager' : 'node-empty-page'
+          emptyPage.textContent = '当前页空白'
+          emptyPage.style.display = 'none'
           card.appendChild(rich)
+          card.appendChild(emptyPage)
 
           var richPager = null
 
@@ -350,12 +372,20 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
             var clamped = Math.max(0, Math.min(pages.length - 1, nextIdx))
             nodePageById[node.id] = clamped
             var pageHtml = pages[clamped] || ''
-            rich.innerHTML = pageHtml
-            rich.querySelectorAll('a').forEach(function (anchor) {
-              if (anchor.hasAttribute('data-pl-ref')) return
-              anchor.setAttribute('target', '_blank')
-              anchor.setAttribute('rel', 'noopener noreferrer')
-            })
+            if (pageHtml.trim() === '') {
+              rich.style.display = 'none'
+              rich.innerHTML = ''
+              emptyPage.style.display = 'flex'
+            } else {
+              emptyPage.style.display = 'none'
+              rich.style.display = 'block'
+              rich.innerHTML = pageHtml
+              rich.querySelectorAll('a').forEach(function (anchor) {
+                if (anchor.hasAttribute('data-pl-ref')) return
+                anchor.setAttribute('target', '_blank')
+                anchor.setAttribute('rel', 'noopener noreferrer')
+              })
+            }
             if (richPager) {
               richPager.label.textContent = (clamped + 1) + '/' + pages.length
               richPager.prev.disabled = clamped <= 0
@@ -379,10 +409,13 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
           var text = rich.textContent || ''
           if (text !== '') labelText = text.length > 40 ? text.slice(0, 40) + '…' : text
         } else {
+          var emptyWrap = document.createElement('div')
+          emptyWrap.className = 'node-empty-wrap'
           var empty = document.createElement('span')
           empty.className = 'node-empty'
           empty.textContent = '空白节点'
-          card.appendChild(empty)
+          emptyWrap.appendChild(empty)
+          card.appendChild(emptyWrap)
         }
         card.setAttribute('aria-label', '节点：' + labelText + branchHint)
         if (hasSubCanvas) card.title = '双击展开支线画布'
@@ -419,101 +452,4 @@ export const PRESENTER_RENDER_SCRIPT = `  app.className = 'presenter'
   center.appendChild(world)
   canvas.appendChild(center)
 
-  var detail = document.createElement('aside')
-  detail.className = 'detail'
-  detail.setAttribute('aria-label', '引用详情')
-  var detailCollapse = document.createElement('button')
-  detailCollapse.type = 'button'
-  detailCollapse.className = 'detail-collapse'
-  detailCollapse.setAttribute('aria-label', '收起左侧详情')
-  detailCollapse.title = '收起左侧详情'
-  detailCollapse.textContent = '‹'
-  var detailImage = document.createElement('img')
-  detailImage.alt = ''
-  detailImage.draggable = false
-  var detailFrame = document.createElement('iframe')
-  detailFrame.className = 'detail-frame'
-  detailFrame.title = '引用内容'
-  var detailPdf = document.createElement('div')
-  detailPdf.className = 'detail-pdf'
-  var detailPdfBar = document.createElement('div')
-  detailPdfBar.className = 'detail-pdf-bar'
-  var detailPdfPrev = document.createElement('button')
-  detailPdfPrev.type = 'button'
-  detailPdfPrev.className = 'detail-pdf-prev'
-  detailPdfPrev.setAttribute('aria-label', '上一页')
-  detailPdfPrev.textContent = '‹'
-  var detailPdfLabel = document.createElement('span')
-  detailPdfLabel.className = 'detail-pdf-label'
-  detailPdfLabel.setAttribute('aria-live', 'polite')
-  var detailPdfNext = document.createElement('button')
-  detailPdfNext.type = 'button'
-  detailPdfNext.className = 'detail-pdf-next'
-  detailPdfNext.setAttribute('aria-label', '下一页')
-  detailPdfNext.textContent = '›'
-  detailPdfBar.appendChild(detailPdfPrev)
-  detailPdfBar.appendChild(detailPdfLabel)
-  detailPdfBar.appendChild(detailPdfNext)
-  var detailPdfScroll = document.createElement('div')
-  detailPdfScroll.className = 'detail-pdf-scroll'
-  var detailPdfCanvas = document.createElement('canvas')
-  detailPdfCanvas.className = 'detail-pdf-canvas'
-  detailPdfScroll.appendChild(detailPdfCanvas)
-  detailPdf.appendChild(detailPdfBar)
-  detailPdf.appendChild(detailPdfScroll)
-
-  var detailFile = document.createElement('div')
-  detailFile.className = 'detail-file'
-  var detailFileHead = document.createElement('div')
-  detailFileHead.className = 'detail-file-head'
-  var detailFileName = document.createElement('span')
-  detailFileName.className = 'detail-file-name'
-  var detailFileBadge = document.createElement('span')
-  detailFileBadge.className = 'detail-file-badge'
-  detailFileHead.appendChild(detailFileName)
-  detailFileHead.appendChild(detailFileBadge)
-  var detailFilePre = document.createElement('pre')
-  detailFilePre.className = 'detail-file-pre'
-  detailFile.appendChild(detailFileHead)
-  detailFile.appendChild(detailFilePre)
-
-  var detailResize = document.createElement('div')
-  detailResize.className = 'detail-resize'
-  detailResize.setAttribute('role', 'separator')
-  detailResize.setAttribute('aria-orientation', 'vertical')
-  detailResize.setAttribute('aria-label', '拖动调整面板宽度')
-  detailResize.tabIndex = 0
-  detail.appendChild(detailCollapse)
-  detail.appendChild(detailImage)
-  detail.appendChild(detailFrame)
-  detail.appendChild(detailPdf)
-  detail.appendChild(detailFile)
-  detail.appendChild(detailResize)
-
-  var pop = document.createElement('div')
-  pop.className = 'ref-pop'
-  pop.setAttribute('role', 'dialog')
-  pop.setAttribute('aria-label', '引用预览')
-  var popHead = document.createElement('div')
-  popHead.className = 'ref-pop-head'
-  var popTitle = document.createElement('span')
-  popTitle.className = 'ref-pop-title'
-  var popTag = document.createElement('span')
-  popTag.className = 'ref-pop-tag'
-  popHead.appendChild(popTitle)
-  popHead.appendChild(popTag)
-  var popBody = document.createElement('button')
-  popBody.type = 'button'
-  popBody.className = 'ref-pop-body'
-  popBody.setAttribute('aria-label', '在左侧展开')
-  var popHint = document.createElement('div')
-  popHint.className = 'ref-pop-hint'
-  pop.appendChild(popHead)
-  pop.appendChild(popBody)
-  pop.appendChild(popHint)
-
-  app.appendChild(detail)
-  app.appendChild(canvas)
-  app.appendChild(pop)
-  document.title = data.document.meta.title || 'PaperLoom'
 `

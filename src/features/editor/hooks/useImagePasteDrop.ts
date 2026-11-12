@@ -13,6 +13,7 @@ import type { InboxEntry } from '@/shared/lib/inbox'
 import { emitCanvasToast } from '@/shared/lib/workspaceFolderSync'
 import type { AddImageNodeTarget } from '../data/document'
 import type { DocumentLayout, Point } from '../data/layout'
+import { hasNodeClipboardMime } from '../lib/clipboardResolution'
 import { cardIdAtPoint, measureWorldZoom } from '../lib/dragHitTest'
 import { readDraggedInboxPayload } from '../lib/inboxClient'
 import {
@@ -155,7 +156,11 @@ function useWindowImagePaste(latestRef: RefObject<Readonly<ImagePasteDropOptions
         event.target instanceof Element &&
         event.target.closest('input, textarea, [contenteditable="true"], dialog, [role="dialog"]') !==
           null
-      if (isEditingText) return
+      const hasOpenModal =
+        typeof document !== 'undefined' &&
+        document.querySelector('dialog[open][aria-modal="true"]') !== null
+      if (isEditingText || hasOpenModal) return
+      if (hasNodeClipboardMime(event.clipboardData)) return
       const file = extractPastedImageFile(event.clipboardData)
       if (file === null) return
       event.preventDefault()

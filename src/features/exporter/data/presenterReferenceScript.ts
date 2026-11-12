@@ -52,19 +52,18 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
       frame.tabIndex = -1
       box.appendChild(frame)
       popBody.appendChild(box)
+    } else if (ref.kind === 'pdf' && !ref.previewSrc) {
+      var missing = document.createElement('div')
+      missing.className = 'ref-pop-missing'
+      missing.textContent = '无预览图'
+      popBody.appendChild(missing)
     } else {
       var img = document.createElement('img')
       img.className = 'ref-pop-img'
       img.alt = ref.label
       img.draggable = false
-      img.src = ref.kind === 'pdf' ? (ref.previewSrc || '') : ref.src
+      img.src = ref.kind === 'pdf' ? ref.previewSrc : ref.src
       popBody.appendChild(img)
-      if (ref.kind === 'pdf' && !ref.previewSrc) {
-        var missing = document.createElement('div')
-        missing.className = 'ref-pop-missing'
-        missing.textContent = '无预览图'
-        popBody.appendChild(missing)
-      }
     }
     popHint.textContent = ref.kind === 'pdf'
       ? '点击在左侧展开 · 双击链接跳转全文引用页'
@@ -89,6 +88,7 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
   function applyPdfTransform() {
     detailPdfCanvas.style.transform =
       'translate(' + pdfStage.x + 'px, ' + pdfStage.y + 'px) scale(' + pdfStage.zoom + ')'
+    detailPdfZoom.textContent = Math.round(pdfStage.zoom * 100) + '%'
   }
 
   function resetPdfTransform() {
@@ -97,6 +97,11 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
     pdfStage.y = 0
     applyPdfTransform()
   }
+
+  detailPdfZoom.addEventListener('click', function (event) {
+    event.stopPropagation()
+    resetPdfTransform()
+  })
 
   detailPdfScroll.addEventListener('pointerdown', function (event) {
     if (event.button !== 0) return
@@ -177,7 +182,10 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
     })
   }
 
-  function openPdfView(src, page) {
+  function openPdfView(src, page, label) {
+    detail.removeAttribute('data-image-empty')
+    detailFile.removeAttribute('data-file-format')
+    detailPdfTitle.textContent = (typeof label === 'string' && label.trim() !== '') ? label.trim() : '文献预览'
     detail.setAttribute('data-mode', 'pdf')
     detail.classList.add('is-open')
     resetPdfTransform()
@@ -190,6 +198,8 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
     }
     pdfView.count = 0
     detailPdfLabel.textContent = '正在解析 PDF…'
+    detailPdfPrev.disabled = true
+    detailPdfNext.disabled = true
     var bytes = takePdfBytes(src)
     if (!bytes) {
       detailPdfLabel.textContent = '缺少 PDF 数据'
@@ -224,18 +234,26 @@ export const PRESENTER_REFERENCE_SCRIPT = `  // --------------------------------
   function openRefDetail(ref) {
     closeRefPop()
     detailImageNodeId = null
+    detailFile.removeAttribute('data-file-format')
     if (ref.kind === 'image') {
-      detailImage.src = ref.src
-      detailImage.alt = ref.label
       detailFrame.src = 'about:blank'
       detail.setAttribute('data-mode', 'image')
+      if (!ref.src || ref.src.trim() === '') {
+        detail.setAttribute('data-image-empty', 'true')
+        detailImage.removeAttribute('src')
+      } else {
+        detail.removeAttribute('data-image-empty')
+        detailImage.src = ref.src
+        detailImage.alt = ref.label || ''
+      }
       detail.classList.add('is-open')
     } else if (ref.kind === 'page') {
+      detail.removeAttribute('data-image-empty')
       detailFrame.src = ref.src
       detail.setAttribute('data-mode', 'page')
       detail.classList.add('is-open')
     } else {
-      openPdfView(ref.src, ref.page)
+      openPdfView(ref.src, ref.page, ref.label)
     }
   }
 `

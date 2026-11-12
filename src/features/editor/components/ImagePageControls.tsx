@@ -1,12 +1,14 @@
-import { useRef } from 'react'
-import type { ChangeEvent } from 'react'
+import { useState } from 'react'
 import { ArrowLeft, ArrowRight, ImagePlus, Pencil, Plus, Presentation, Trash2 } from 'lucide-react'
 
 import { Button } from '@/shared/components/ui/button'
 import { isSlideSvgPath, normalizeInboxLookupPath } from '@/shared/lib/inbox'
+import type { InboxEntry } from '@/shared/lib/inbox'
 import { resolveActiveImageIndex, resolveImageItems } from '@/shared/lib/mediaPages'
 import type { ImageNodeContent, ImageSlideItem } from '@/shared/types/paper'
-import { INBOX_SAVE_FAILED, saveImageSlideToInbox } from '../lib/inboxUpload'
+import { buildSlideItemFromInboxPath } from '../lib/inboxUpload'
+import { FilePoolImagePickerModal } from './FilePoolImagePickerModal'
+import type { FilePoolImagePickerMode } from './FilePoolImagePickerModal'
 
 interface ImagePageControlsProps {
   readonly content: ImageNodeContent
@@ -21,42 +23,25 @@ interface ImagePageControlsProps {
 const PAGE_BTN_CLS =
   'h-8 border-slate-200/90 bg-white px-2.5 text-[13px] text-slate-700 shadow-2xs hover:bg-slate-50'
 
-function ingestSlides(
-  files: readonly File[],
-  onSlides: (slides: readonly ImageSlideItem[]) => void,
-): void {
-  void Promise.all(files.map((file) => saveImageSlideToInbox(file)))
-    .then(onSlides)
-    .catch(() => {
-      window.alert(INBOX_SAVE_FAILED)
-    })
-}
-
-function useSlideFilePicking(
+function applyPickedPoolEntries(
+  mode: FilePoolImagePickerMode | null,
+  entries: readonly InboxEntry[],
   onReplaceImagePage: (item: ImageSlideItem) => void,
   onAddImagePages: (items: readonly ImageSlideItem[]) => void,
-) {
-  const replaceInputRef = useRef<HTMLInputElement>(null)
-  const addInputRef = useRef<HTMLInputElement>(null)
-
-  const handleReplace = (event: ChangeEvent<HTMLInputElement>): void => {
-    const file = event.target.files?.[0] ?? null
-    event.target.value = ''
-    if (file === null) return
-    ingestSlides([file], (slides) => {
-      const slide = slides[0]
-      if (slide !== undefined) onReplaceImagePage(slide)
+): void {
+  if (mode === null || entries.length === 0) return
+  void Promise.all(entries.map((entry) => buildSlideItemFromInboxPath(entry.path, entry.name)))
+    .then((slides) => {
+      if (mode === 'replace') {
+        const first = slides[0]
+        if (first !== undefined) onReplaceImagePage(first)
+        return
+      }
+      onAddImagePages(slides)
     })
-  }
-
-  const handleAdd = (event: ChangeEvent<HTMLInputElement>): void => {
-    const files = Array.from(event.target.files ?? [])
-    event.target.value = ''
-    if (files.length === 0) return
-    ingestSlides(files, onAddImagePages)
-  }
-
-  return { replaceInputRef, addInputRef, handleReplace, handleAdd }
+    .catch(() => {
+      window.alert('读取文件池图片失败')
+    })
 }
 
 function SlidePageButtons({
@@ -145,16 +130,12 @@ export function ImagePageControls({
   onCreateSlideForNode,
   onEditSlidePath,
 }: Readonly<ImagePageControlsProps>) {
-  const { replaceInputRef, addInputRef, handleReplace, handleAdd } = useSlideFilePicking(
-    onReplaceImagePage,
-    onAddImagePages,
-  )
+  const [pickerMode, setPickerMode] = useState<FilePoolImagePickerMode | null>(null)
   const items = resolveImageItems(content).filter((item) => item.src.trim() !== '')
   const hasImage = items.length > 0
   const activeIndex = hasImage ? Math.min(resolveActiveImageIndex(content), items.length - 1) : 0
-  const activeItem = items[activeIndex]
-  const activeAlt = activeItem?.alt ?? ''
-  const activeSrc = activeItem?.src ?? ''
+  const activeAlt = items[activeIndex]?.alt ?? ''
+  const activeSrc = items[activeIndex]?.src ?? ''
   const slideRelPath = isSlideSvgPath(activeSrc) ? normalizeInboxLookupPath(activeSrc) : null
 
   return (
@@ -165,7 +146,7 @@ export function ImagePageControls({
         size="sm"
         className={PAGE_BTN_CLS}
         onClick={() => {
-          replaceInputRef.current?.click()
+          setPickerMode('replace')
         }}
       >
         <ImagePlus className="size-4 text-primary" aria-hidden="true" />
@@ -177,7 +158,7 @@ export function ImagePageControls({
         size="sm"
         className={PAGE_BTN_CLS}
         onClick={() => {
-          addInputRef.current?.click()
+          setPickerMode('add')
         }}
       >
         <Plus className="size-4 text-primary" aria-hidden="true" />
@@ -205,12 +186,21 @@ export function ImagePageControls({
         删除当前页
       </Button>
       <span className="max-w-36 truncate text-xs text-slate-400">
-        {hasImage
-          ? `${activeIndex + 1}/${items.length} · ${activeAlt || '未命名图片'}`
-          : '未选择图片'}
+        {hasImage ? `${activeIndex + 1}/${items.length} · ${activeAlt || '未命名图片'}` : '未选择图片'}
       </span>
-      <input ref={replaceInputRef} type="file" accept="image/*" tabIndex={-1} aria-hidden="true" className="hidden" onChange={handleReplace} />
-      <input ref={addInputRef} type="file" accept="image/*" multiple tabIndex={-1} aria-hidden="true" className="hidden" onChange={handleAdd} />
+      {pickerMode !== null && (
+        <FilePoolImagePickerModal
+          mode={pickerMode}
+          onConfirmEntries={(entries) => {
+            const mode = pickerMode
+            setPickerMode(null)
+            applyPickedPoolEntries(mode, entries, onReplaceImagePage, onAddImagePages)
+          }}
+          onClose={() => {
+            setPickerMode(null)
+          }}
+        />
+      )}
     </div>
   )
 }

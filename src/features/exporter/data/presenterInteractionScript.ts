@@ -87,15 +87,17 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
       var source = activePositions[entry.parentId]
       var target = activePositions[entry.nodeId]
       if (!node || !parentNode || !source || !target) return
-      entry.path.setAttribute(
-        'd',
-        connectionPathD(
-          source,
-          target,
-          edgeWidthOf(parentNode, expandedId),
-          edgeWidthOf(node, expandedId),
-        ),
-      )
+      var sourceWidth = edgeWidthOf(parentNode, expandedId)
+      var targetWidth = edgeWidthOf(node, expandedId)
+      entry.path.setAttribute('d', connectionPathD(source, target, sourceWidth, targetWidth))
+      if (entry.startDot) {
+        entry.startDot.setAttribute('cx', String(source.x + sourceWidth / 2))
+        entry.startDot.setAttribute('cy', String(source.y))
+      }
+      if (entry.endDot) {
+        entry.endDot.setAttribute('cx', String(target.x - targetWidth / 2))
+        entry.endDot.setAttribute('cy', String(target.y))
+      }
     })
     Object.keys(bridgesById).forEach(function (id) {
       var bridgeNode = nodeById[id]
@@ -106,6 +108,9 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
   function closeDetail() {
     detailImageNodeId = null
     detail.classList.remove('is-open')
+    detail.removeAttribute('data-mode')
+    detail.removeAttribute('data-image-empty')
+    detailFile.removeAttribute('data-file-format')
   }
 
   function collapseMedia() {
@@ -114,26 +119,68 @@ export const PRESENTER_INTERACTION_SCRIPT = `  var MIN_ZOOM = 0.3
     renderState()
   }
 
+  function findFirstEmbeddedRef(node) {
+    var card = cardsById[node.id]
+    if (card) {
+      var anchor = card.querySelector('a[' + REF_KIND_ATTR + ']')
+      if (anchor) return refOf(anchor)
+    }
+    var richText = node.content && node.content.richText
+    if (typeof richText !== 'string' || richText.indexOf(REF_KIND_ATTR) === -1) return null
+    var holder = document.createElement('div')
+    holder.innerHTML = richText
+    var parsedAnchor = holder.querySelector('a[' + REF_KIND_ATTR + ']')
+    return parsedAnchor ? refOf(parsedAnchor) : null
+  }
+
   function openDetail(node) {
     if (!node || !node.content) return
     var c = node.content
     detailImageNodeId = null
+    detailFile.removeAttribute('data-file-format')
     if (c.kind === 'image' && typeof c.src === 'string') {
-      detailImage.src = c.src
-      detailImage.alt = typeof c.alt === 'string' ? c.alt : ''
+      var imgItems = imageItemsOf(c)
+      var imgIdx = typeof nodePageById[node.id] === 'number'
+        ? nodePageById[node.id]
+        : imageActiveIndexOf(c, imgItems)
+      var activeImg = imgItems[imgIdx] || { src: c.src, alt: c.alt }
+      var activeSrc = typeof activeImg.src === 'string' ? activeImg.src : ''
       detailFrame.src = 'about:blank'
       detailImageNodeId = node.id
       detail.setAttribute('data-mode', 'image')
+      if (activeSrc.trim() === '') {
+        detail.setAttribute('data-image-empty', 'true')
+        detailImage.removeAttribute('src')
+      } else {
+        detail.removeAttribute('data-image-empty')
+        detailImage.src = activeSrc
+        detailImage.alt = typeof activeImg.alt === 'string' ? activeImg.alt : (typeof c.alt === 'string' ? c.alt : '')
+      }
       detail.classList.add('is-open')
       return
     }
     if (c.kind === 'file') {
       detailFrame.src = 'about:blank'
+      detail.removeAttribute('data-image-empty')
       detailFileName.textContent = c.fileName || '未命名文件'
-      detailFileBadge.textContent = c.format === 'markdown' ? 'MD' : 'CODE'
-      detailFilePre.textContent = typeof c.text === 'string' ? c.text : ''
+      var isMd = c.format === 'markdown'
+      detailFileBadge.textContent = isMd ? '· Markdown' : '· Source Code'
+      detailFile.setAttribute('data-file-format', isMd ? 'markdown' : 'code')
+      var rawText = typeof c.text === 'string' ? c.text : ''
+      if (isMd) {
+        detailFileMd.innerHTML = renderStaticMarkdownHtml(rawText)
+        detailFilePre.textContent = ''
+      } else {
+        detailFilePre.textContent = rawText
+        detailFileMd.innerHTML = ''
+      }
       detail.setAttribute('data-mode', 'file')
       detail.classList.add('is-open')
+      return
+    }
+    if (c.kind === 'text') {
+      var embedded = findFirstEmbeddedRef(node)
+      if (embedded) openRefDetail(embedded)
     }
   }
 
